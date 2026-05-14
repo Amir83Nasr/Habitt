@@ -1,20 +1,9 @@
 """
 Theme definitions and management for Habitt.
 
-This module provides a set of predefined color themes and a function
-to load the user's active theme from the configuration file.
-
-Each theme is a dictionary that maps UI element names to Rich style strings.
-You can customize colors by editing the dictionaries below or by creating
-a new preset and adding it to PRESETS.
-
-Rich style strings can include:
-- color names: "red", "blue", "green", etc.
-- bright variants: "bright_blue", "bright_green"
-- modifiers: "bold", "dim", "italic", "underline", "reverse"
-- background colors: "on purple4", "on grey23"
-- Combine them: "bold bright_blue on purple4"
-- Hex colors: "#ff00ff"
+Each theme is a dictionary mapping UI elements to Rich style strings.
+To add a custom theme, just add a new entry to PRESETS.
+Rich style syntax: "bold bright_blue on purple4", "italic #ff00ff", etc.
 """
 
 import json
@@ -22,10 +11,6 @@ from pathlib import Path
 from typing import Dict
 
 from habitt.core.config import CONFIG_FILE
-
-# ----------------------------------------------------------------------
-# Preset themes
-# ----------------------------------------------------------------------
 
 PRESETS: Dict[str, Dict[str, str]] = {
     "blue_purple": {
@@ -70,19 +55,139 @@ PRESETS: Dict[str, Dict[str, str]] = {
         "tag": "italic white",
         "clock": "white",
     },
+    "ocean": {
+        "app_title": "bold cyan on deep_sky_blue4",
+        "panel_border": "cyan",
+        "success": "bright_green",
+        "warning": "gold1",
+        "info": "bright_cyan",
+        "dim": "dim cyan",
+        "accent": "deep_sky_blue1",
+        "error": "bold red",
+        "checkbox_done": "bright_green",
+        "checkbox_open": "dim cyan",
+        "tag": "deep_sky_blue1",
+        "clock": "bright_cyan",
+    },
+    "sunset": {
+        "app_title": "bold yellow on dark_orange3",
+        "panel_border": "dark_orange",
+        "success": "green",
+        "warning": "bright_yellow",
+        "info": "orange1",
+        "dim": "dim yellow",
+        "accent": "dark_orange3",
+        "error": "bold red",
+        "checkbox_done": "green",
+        "checkbox_open": "dim yellow",
+        "tag": "orange1",
+        "clock": "bright_yellow",
+    },
+    "retro": {
+        "app_title": "bold bright_yellow on grey15",
+        "panel_border": "bright_yellow",
+        "success": "bright_green",
+        "warning": "yellow",
+        "info": "bright_yellow",
+        "dim": "dim bright_black",
+        "accent": "bright_magenta",
+        "error": "bold red",
+        "checkbox_done": "bright_green",
+        "checkbox_open": "dim bright_black",
+        "tag": "bright_magenta",
+        "clock": "bright_yellow",
+    },
+    "midnight": {
+        "app_title": "bold white on dark_blue",
+        "panel_border": "dark_blue",
+        "success": "bright_green",
+        "warning": "yellow",
+        "info": "white",
+        "dim": "dim white",
+        "accent": "bright_blue",
+        "error": "bold red",
+        "checkbox_done": "bright_green",
+        "checkbox_open": "dim white",
+        "tag": "bright_blue",
+        "clock": "white",
+    },
+    "lavender": {
+        "app_title": "bold bright_magenta on grey15",
+        "panel_border": "bright_magenta",
+        "success": "green",
+        "warning": "yellow",
+        "info": "bright_magenta",
+        "dim": "dim bright_black",
+        "accent": "purple",
+        "error": "bold red",
+        "checkbox_done": "green",
+        "checkbox_open": "dim bright_black",
+        "tag": "purple",
+        "clock": "bright_magenta",
+    },
+    "crimson": {
+        "app_title": "bold bright_red on dark_red",
+        "panel_border": "bright_red",
+        "success": "green",
+        "warning": "yellow",
+        "info": "bright_red",
+        "dim": "dim red",
+        "accent": "dark_red",
+        "error": "bold yellow",
+        "checkbox_done": "green",
+        "checkbox_open": "dim red",
+        "tag": "dark_red",
+        "clock": "bright_red",
+    },
+    "amber": {
+        "app_title": "bold bright_yellow on dark_orange",
+        "panel_border": "dark_orange",
+        "success": "green",
+        "warning": "bright_yellow",
+        "info": "yellow",
+        "dim": "dim yellow",
+        "accent": "orange1",
+        "error": "bold red",
+        "checkbox_done": "green",
+        "checkbox_open": "dim yellow",
+        "tag": "orange1",
+        "clock": "bright_yellow",
+    },
+    "teal": {
+        "app_title": "bold bright_cyan on dark_cyan",
+        "panel_border": "bright_cyan",
+        "success": "green",
+        "warning": "yellow",
+        "info": "bright_cyan",
+        "dim": "dim cyan",
+        "accent": "dark_cyan",
+        "error": "bold red",
+        "checkbox_done": "green",
+        "checkbox_open": "dim cyan",
+        "tag": "dark_cyan",
+        "clock": "bright_cyan",
+    },
+    "nord": {
+        "app_title": "bold white on #4c566a",
+        "panel_border": "#81a1c1",
+        "success": "#a3be8c",
+        "warning": "#ebcb8b",
+        "info": "#81a1c1",
+        "dim": "dim white",
+        "accent": "#b48ead",
+        "error": "#bf616a",
+        "checkbox_done": "#a3be8c",
+        "checkbox_open": "dim white",
+        "tag": "#b48ead",
+        "clock": "#81a1c1",
+    },
 }
 
 DEFAULT_THEME = "blue_purple"
 
 
 def get_active_theme() -> Dict[str, str]:
-    """
-    Return the currently active theme dictionary.
-
-    Loads the theme name from CONFIG_FILE (if it exists and is valid),
-    then returns the corresponding preset. Falls back to DEFAULT_THEME
-    if anything goes wrong.
-    """
+    """Load active theme from config file, fallback to DEFAULT_THEME."""
     theme_name = DEFAULT_THEME
     try:
         if CONFIG_FILE.exists():
@@ -93,16 +198,11 @@ def get_active_theme() -> Dict[str, str]:
                 theme_name = name
     except (json.JSONDecodeError, OSError):
         pass
-
     return PRESETS.get(theme_name, PRESETS[DEFAULT_THEME])
 
 
 def save_theme(theme_name: str) -> None:
-    """
-    Save the given theme name to the configuration file.
-
-    Raises ValueError if the theme name is not a valid preset.
-    """
+    """Save chosen theme to config file."""
     if theme_name not in PRESETS:
         raise ValueError(f"Unknown theme: {theme_name}")
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
