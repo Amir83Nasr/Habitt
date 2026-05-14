@@ -1,0 +1,1 @@
+"""Tico: terminal todo manager."""

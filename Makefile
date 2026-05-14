@@ -1,0 +1,31 @@
+.PHONY: help install dev-install test lint format type-check clean
+
+.DEFAULT_GOAL := help
+
+help: ## Show this help message
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+
+install: ## Install the package
+	pip install .
+
+dev-install: ## Install with development dependencies
+	pip install -e ".[dev]"
+
+test: ## Run tests with pytest
+	pytest
+
+lint: ## Lint source and test files with ruff
+	ruff check src/ tests/
+
+format: ## Format code with black and ruff
+	black src/ tests/
+	ruff format src/ tests/
+
+type-check: ## Type-check with mypy
+	mypy src/
+
+clean: ## Remove build artifacts and caches
+	rm -rf build/ dist/ *.egg-info .mypy_cache .pytest_cache .ruff_cache
+	find . -type d -name __pycache__ -exec rm -rf {} +
+	find . -type f -name "*.pyc" -delete
