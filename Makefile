@@ -18,6 +18,9 @@ test: ## Run tests with pytest
 lint: ## Lint source and test files with ruff
 	ruff check src/ tests/
 
+lint-fix: ## Lint and fix source and test files with ruff
+	ruff check --fix src/ tests/
+
 format: ## Format code with black and ruff
 	black src/ tests/
 	ruff format src/ tests/
