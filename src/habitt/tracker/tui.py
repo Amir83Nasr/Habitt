@@ -8,12 +8,12 @@ from typing import Optional
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Prompt
+from rich.prompt import Prompt, IntPrompt
 from rich.table import Table
 from rich.live import Live
 from rich.layout import Layout
 
-from habitt.core.themes import THEME
+from habitt.core.themes import get_active_theme
 from habitt.core.jalali_helper import (
     now_tehran,
     now_shamsi_str,
@@ -34,7 +34,6 @@ def _get_key_nonblocking() -> Optional[str]:
             return msvcrt.getch().decode("utf-8", errors="replace")
         return None
     else:
-        # Unix: need terminal in cbreak mode; we set it inside TimerSession
         if select.select([sys.stdin], [], [], 0)[0]:
             return sys.stdin.read(1)
         return None
@@ -67,11 +66,8 @@ class TimerSession:
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
     def run(self) -> Optional["Activity"]:
-        """
-        Start the live timer TUI.
-        Returns Activity if stopped normally, None if cancelled.
-        """
-        # Save original terminal settings for Unix
+        """Start the live timer TUI. Returns Activity if stopped normally, else None."""
+        theme = get_active_theme()
         if sys.platform != "win32":
             import termios
             import tty
@@ -81,13 +77,13 @@ class TimerSession:
             tty.setcbreak(fd)
         try:
             with Live(
-                self._render_layout(),
+                self._render_layout(theme),
                 refresh_per_second=10,
                 screen=True,
                 transient=False,
             ) as live:
                 while True:
-                    live.update(self._render_layout())
+                    live.update(self._render_layout(theme))
                     key = _get_key_nonblocking()
                     if key:
                         if key.lower() == "p" and not self.paused:
@@ -119,14 +115,13 @@ class TimerSession:
         if self.cancelled:
             return None
 
-        # Build an Activity from the session
         from habitt.tracker.models import Activity
 
         start_str = format_shamsi_datetime(self.start_time)
         end_str = format_shamsi_datetime(self.end_time)
         return Activity(title=self.title, start_time=start_str, end_time=end_str)
 
-    def _render_layout(self) -> Layout:
+    def _render_layout(self, theme: dict) -> Layout:
         layout = Layout()
         layout.split(
             Layout(name="header", size=3),
@@ -135,46 +130,50 @@ class TimerSession:
         )
         header = Panel(
             f"Timer: {self.title}",
-            style=THEME["app_title"],
+            style=theme["app_title"],
         )
         status = "PAUSED" if self.paused else "RUNNING"
-        timer_text = f"[{THEME['clock']}]Elapsed: {self._format_elapsed()}   [{THEME['accent']}]{status}[/{THEME['accent']}]"
+        timer_text = (
+            f"[{theme['clock']}]Elapsed: {self._format_elapsed()}   "
+            f"[{theme['accent']}]{status}[/{theme['accent']}]"
+        )
         controls_text = (
-            f"[{THEME['info']}]p[/{THEME['info']}] Pause   "
-            f"[{THEME['info']}]r[/{THEME['info']}] Resume   "
-            f"[{THEME['info']}]s[/{THEME['info']}] Stop & Save   "
-            f"[{THEME['dim']}]q[/{THEME['dim']}] Quit without saving"
+            f"[{theme['info']}]p[/{theme['info']}] Pause   "
+            f"[{theme['info']}]r[/{theme['info']}] Resume   "
+            f"[{theme['info']}]s[/{theme['info']}] Stop & Save   "
+            f"[{theme['dim']}]q[/{theme['dim']}] Quit without saving"
         )
         layout["header"].update(header)
-        layout["timer"].update(Panel(timer_text, border_style=THEME["panel_border"]))
-        layout["controls"].update(Panel(controls_text, border_style=THEME["dim"]))
+        layout["timer"].update(Panel(timer_text, border_style=theme["panel_border"]))
+        layout["controls"].update(Panel(controls_text, border_style=theme["dim"]))
         return layout
 
 
 def show_log(manager: TrackerManager) -> None:
-    """Display today's activity log as a table."""
+    """Display today's activity log as a table with row numbers."""
+    theme = get_active_theme()
     console.clear()
     activities = manager.list_today()
     table = Table(
         title="Today's Activities",
-        border_style=THEME["panel_border"],
+        border_style=theme["panel_border"],
     )
-    table.add_column("ID", style=THEME["dim"], width=8)
+    table.add_column("#", style=theme["dim"], width=4, justify="right")
     table.add_column("Title", style="bold")
-    table.add_column("Start", style=THEME["info"])
-    table.add_column("End", style=THEME["info"])
-    table.add_column("Duration", style=THEME["accent"])
+    table.add_column("Start", style=theme["info"])
+    table.add_column("End", style=theme["info"])
+    table.add_column("Duration", style=theme["accent"])
 
     if not activities:
         table.add_row("", "No activities logged today.", "", "", "")
     else:
-        for a in activities:
+        for i, a in enumerate(activities, start=1):
             seconds = shamsi_diff_seconds(a.start_time, a.end_time)
             hours, remainder = divmod(int(seconds), 3600)
             minutes, _ = divmod(remainder, 60)
             duration_str = f"{hours}h {minutes}m"
             table.add_row(
-                a.id,
+                str(i),
                 a.title,
                 a.start_time.split()[1],
                 a.end_time.split()[1],
@@ -186,32 +185,34 @@ def show_log(manager: TrackerManager) -> None:
 
 def add_manual_form(manager: TrackerManager) -> None:
     """Interactive form to manually add an activity."""
+    theme = get_active_theme()
     console.clear()
-    console.print(Panel.fit("Add Activity Manually", style=THEME["panel_border"]))
+    console.print(Panel.fit("Add Activity Manually", style=theme["panel_border"]))
     title = Prompt.ask("Title")
     start = Prompt.ask("Start time (YYYY/MM/DD HH:MM)")
     end = Prompt.ask("End time (YYYY/MM/DD HH:MM)")
     try:
         manager.add_activity(title, start, end)
-        console.print(f"[{THEME['success']}]Activity added.[/{THEME['success']}]")
+        console.print(f"[{theme['success']}]Activity added.[/{theme['success']}]")
     except ValueError as e:
-        console.print(f"[{THEME['error']}]Invalid time format: {e}[/{THEME['error']}]")
+        console.print(f"[{theme['error']}]Invalid time format: {e}[/{theme['error']}]")
     Prompt.ask("\nPress Enter to continue", default="")
 
 
 def show_stats(manager: TrackerManager) -> None:
     """Display daily statistics and a simple bar chart."""
+    theme = get_active_theme()
     console.clear()
     stats = manager.last_days_stats(7)
     max_minutes = max((m for _, m in stats), default=1)
 
     table = Table(
         title="Daily Summary (last 7 days)",
-        border_style=THEME["panel_border"],
+        border_style=theme["panel_border"],
     )
-    table.add_column("Date", style=THEME["info"])
+    table.add_column("Date", style=theme["info"])
     table.add_column("Total", style="bold")
-    table.add_column("Chart", style=THEME["accent"])
+    table.add_column("Chart", style=theme["accent"])
 
     bar_width = 20
     for date_str, minutes in stats:
@@ -230,16 +231,17 @@ def main_menu() -> None:
     manager = TrackerManager()
 
     while True:
+        theme = get_active_theme()
         console.clear()
         console.print(
-            Panel.fit("TRACKER - Daily Activity Logger", style=THEME["app_title"])
+            Panel.fit("TRACKER - Daily Activity Logger", style=theme["app_title"])
         )
         console.print()
-        console.print(f"[{THEME['info']}]1[/{THEME['info']}] Show today's log")
-        console.print(f"[{THEME['info']}]2[/{THEME['info']}] Add activity manually")
-        console.print(f"[{THEME['info']}]3[/{THEME['info']}] Start live timer")
-        console.print(f"[{THEME['info']}]4[/{THEME['info']}] Statistics")
-        console.print(f"[{THEME['dim']}]0[/{THEME['dim']}] Back")
+        console.print(f"[{theme['info']}]1[/{theme['info']}] Show today's log")
+        console.print(f"[{theme['info']}]2[/{theme['info']}] Add activity manually")
+        console.print(f"[{theme['info']}]3[/{theme['info']}] Start live timer")
+        console.print(f"[{theme['info']}]4[/{theme['info']}] Statistics")
+        console.print(f"[{theme['dim']}]0[/{theme['dim']}] Back")
         console.print()
 
         choice = Prompt.ask("Your choice", choices=["1", "2", "3", "4", "0"])
@@ -261,10 +263,10 @@ def main_menu() -> None:
                     activity.end_time,
                 )
                 console.print(
-                    f"[{THEME['success']}]Activity saved.[/{THEME['success']}]"
+                    f"[{theme['success']}]Activity saved.[/{theme['success']}]"
                 )
             else:
-                console.print(f"[{THEME['dim']}]Timer cancelled.[/{THEME['dim']}]")
+                console.print(f"[{theme['dim']}]Timer cancelled.[/{theme['dim']}]")
             Prompt.ask("\nPress Enter to continue", default="")
         elif choice == "4":
             show_stats(manager)

@@ -40,7 +40,7 @@ dev = [
 [project.scripts]
 tico = "habitt.tico.cli:main"
 tracker = "habitt.tracker.cli:main"
-habit = "habitt.habit.cli:main"
+habitt = "habitt.cli:main"
 
 [tool.black]
 line-length = 88
@@ -49,11 +49,13 @@ target-version = ['py39']
 [tool.ruff]
 line-length = 88
 target-version = "py39"
-select = ["E", "F", "I", "N", "W", "UP", "B", "C4"]
-ignore = []
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4"]
+ignore = []
 
 [tool.mypy]
 python_version = "3.9"

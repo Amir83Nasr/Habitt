@@ -3,7 +3,7 @@
 import uuid
 from typing import List, Optional
 
-from habitt.core.config import TICO_FILE
+from habitt.core import config
 from habitt.core.storage import load_json, save_json
 from habitt.tico.models import TodoItem
 
@@ -13,12 +13,15 @@ class TodoManager:
         self.items: List[TodoItem] = []
         self._load()
 
+    def _filepath(self):
+        return config.TICO_FILE
+
     def _load(self) -> None:
-        data = load_json(TICO_FILE)
+        data = load_json(self._filepath())
         self.items = [TodoItem.from_dict(item) for item in data]
 
     def _save(self) -> None:
-        save_json(TICO_FILE, [item.to_dict() for item in self.items])
+        save_json(self._filepath(), [item.to_dict() for item in self.items])
 
     def add(self, title: str, tag: Optional[str] = None) -> TodoItem:
         item = TodoItem(title=title, tag=tag)

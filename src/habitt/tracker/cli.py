@@ -1,9 +1,10 @@
 """Click-based CLI for quick tracker commands (start/pause/resume/stop)."""
 
 import json
-import click
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import Optional
+
+import click
 
 from habitt.core.config import TIMER_STATE_FILE
 from habitt.core.jalali_helper import (
@@ -27,7 +28,7 @@ class TimerState:
 def _load_timer_state() -> Optional[TimerState]:
     if not TIMER_STATE_FILE.exists():
         return None
-    with open(TIMER_STATE_FILE, "r", encoding="utf-8") as f:
+    with open(TIMER_STATE_FILE, encoding="utf-8") as f:
         data = json.load(f)
     return TimerState(**data)
 

@@ -10,7 +10,7 @@ def load_json(filepath: Path) -> Any:
     if not filepath.exists():
         return []
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError):
         return []

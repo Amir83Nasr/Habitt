@@ -1,13 +1,17 @@
-"""Jalali (Shamsi) date/time helpers using jdatetime."""
+"""Jalali (Shamsi) date/time helpers using jdatetime and zoneinfo."""
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import jdatetime
+
+TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 
 
 def now_tehran() -> jdatetime.datetime:
     """Return current Jalali datetime in Asia/Tehran timezone."""
-    return jdatetime.datetime.now(jdatetime.timezone("Asia/Tehran"))
+    gregorian_now = datetime.now(TEHRAN_TZ)
+    return jdatetime.datetime.fromgregorian(datetime=gregorian_now)
 
 
 def now_shamsi_str() -> str:
@@ -21,8 +25,10 @@ def today_shamsi_str() -> str:
 
 
 def parse_shamsi_datetime(text: str) -> jdatetime.datetime:
-    """Parse a Shamsi datetime string (YYYY/MM/DD HH:MM[:SS]) into jdatetime.datetime."""
-    # Expects format like '1404/08/23 14:30'
+    """
+    Parse a Shamsi datetime string (YYYY/MM/DD HH:MM[:SS]) into a
+    timezone-aware jdatetime.datetime.
+    """
     parts = text.strip().split()
     if len(parts) != 2:
         raise ValueError(f"Invalid Shamsi datetime format: {text}")
@@ -30,9 +36,10 @@ def parse_shamsi_datetime(text: str) -> jdatetime.datetime:
     year, month, day = map(int, date_part.split("/"))
     hour, minute, *sec = map(int, time_part.split(":"))
     second = sec[0] if sec else 0
-    return jdatetime.datetime(
-        year, month, day, hour, minute, second, tzinfo=jdatetime.timezone("Asia/Tehran")
-    )
+
+    # Build a naive Jalali datetime, then attach Tehran timezone
+    naive = jdatetime.datetime(year, month, day, hour, minute, second)
+    return naive.replace(tzinfo=TEHRAN_TZ)
 
 
 def format_shamsi_datetime(dt: jdatetime.datetime) -> str:

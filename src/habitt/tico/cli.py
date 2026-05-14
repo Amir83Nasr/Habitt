@@ -2,8 +2,9 @@
 
 import click
 
+from habitt.core.themes import get_active_theme
 from habitt.tico.todo_manager import TodoManager
-from habitt.tico.tui import show_list as tui_show_list
+from habitt.tico.tui import _display_items
 
 
 @click.group()
@@ -27,7 +28,8 @@ def add(title: str, tag: str | None) -> None:
 def list(tag: str | None) -> None:
     """List tasks (use --tag to filter)."""
     manager = TodoManager()
-    tui_show_list(manager, tag=tag)
+    # Use the same display function from TUI, which respects active theme
+    _display_items(manager, tag=tag)
 
 
 @main.command()
@@ -47,7 +49,6 @@ def done(task_id: str) -> None:
 def undo(task_id: str) -> None:
     """Mark a task as undone."""
     manager = TodoManager()
-    # To undo we need to ensure it ends up undone, so toggle if currently done
     item = manager.get_by_id(task_id)
     if item and item.done:
         manager.toggle(task_id)
@@ -69,7 +70,6 @@ def remove(task_id: str) -> None:
         click.echo("Task not found.")
 
 
-# If no subcommand is given, launch the TUI
 if __name__ == "__main__":
     import sys
 

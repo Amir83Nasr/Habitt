@@ -1,7 +1,6 @@
 """Data model for a logged activity."""
 
-from dataclasses import dataclass, field
-from habitt.core.jalali_helper import now_shamsi_str
+from dataclasses import dataclass
 
 
 @dataclass
