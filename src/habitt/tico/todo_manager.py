@@ -1,7 +1,9 @@
 """Core logic for todo operations."""
 
 import uuid
+import csv
 from typing import List, Optional
+from pathlib import Path
 
 from habitt.core import config
 from habitt.core.storage import load_json, save_json
@@ -14,7 +16,9 @@ class TodoManager:
         self._load()
 
     def _filepath(self):
-        return config.TICO_FILE
+        from habitt.core.config import get_tico_file
+
+        return get_tico_file()
 
     def _load(self) -> None:
         data = load_json(self._filepath())
@@ -22,6 +26,35 @@ class TodoManager:
 
     def _save(self) -> None:
         save_json(self._filepath(), [item.to_dict() for item in self.items])
+
+    def export_data(self, directory: Path, format: str = "json") -> Path:
+        """Export all todo items to a file on Desktop. Returns the file path."""
+        directory.mkdir(parents=True, exist_ok=True)
+        filename = f"tico_export.{format}"
+        filepath = directory / filename
+
+        items = self.list_all()
+        if format == "json":
+            save_json(filepath, [item.to_dict() for item in items])
+        elif format == "csv":
+            with open(filepath, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["ID", "Title", "Done", "Tag", "Created"])
+                for item in items:
+                    writer.writerow(
+                        [item.id, item.title, item.done, item.tag, item.created_at]
+                    )
+        elif format == "txt":
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write("TICO - Todo Export\n")
+                f.write("=" * 30 + "\n")
+                for item in items:
+                    status = "[x]" if item.done else "[ ]"
+                    tag_str = f" #{item.tag}" if item.tag else ""
+                    f.write(f"{status} {item.title}{tag_str}  ({item.created_at})\n")
+        else:
+            raise ValueError(f"Unsupported format: {format}")
+        return filepath
 
     def add(self, title: str, tag: Optional[str] = None) -> TodoItem:
         item = TodoItem(title=title, tag=tag)

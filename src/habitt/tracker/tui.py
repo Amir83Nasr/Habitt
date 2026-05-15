@@ -5,6 +5,7 @@ import time
 import select
 from datetime import timedelta
 from typing import Optional
+from pathlib import Path
 
 from rich.console import Console
 from rich.panel import Panel
@@ -237,12 +238,15 @@ def main_menu() -> None:
             Panel.fit("TRACKER - Daily Activity Logger", style=theme["app_title"])
         )
         console.print()
-        console.print(f"[{theme['info']}]1[/{theme['info']}] Show today's log")
-        console.print(f"[{theme['info']}]2[/{theme['info']}] Add activity manually")
-        console.print(f"[{theme['info']}]3[/{theme['info']}] Start live timer")
-        console.print(f"[{theme['info']}]4[/{theme['info']}] Statistics")
-        console.print(f"[{theme['dim']}]0[/{theme['dim']}] Back")
-        console.print()
+        console.print(
+            f"[{theme['info']}]1[/] Show log   "
+            f"[{theme['info']}]2[/] Add manual   "
+            f"[{theme['info']}]3[/] Live timer   "
+            f"[{theme['info']}]4[/] Statistics   "
+            f"[{theme['info']}]5[/] Export   "
+            f"[{theme['dim']}]0[/] Back"
+        )
+        choice = Prompt.ask("Your choice", choices=["1", "2", "3", "4", "5", "0"])
 
         choice = Prompt.ask("Your choice", choices=["1", "2", "3", "4", "0"])
 
@@ -268,8 +272,24 @@ def main_menu() -> None:
             else:
                 console.print(f"[{theme['dim']}]Timer cancelled.[/{theme['dim']}]")
             Prompt.ask("\nPress Enter to continue", default="")
+
         elif choice == "4":
             show_stats(manager)
             Prompt.ask("\nPress Enter to continue", default="")
+
+        elif choice == "5":
+            fmt = Prompt.ask("Format (json/csv/txt)", choices=["json", "csv", "txt"])
+            desktop = Path.home() / "Desktop"
+            try:
+                path = manager.export_data(desktop, fmt)
+                console.print(
+                    f"[{theme['success']}]Exported to {path}[/{theme['success']}]"
+                )
+            except Exception as e:
+                console.print(
+                    f"[{theme['error']}]Export failed: {e}[/{theme['error']}]"
+                )
+            Prompt.ask("\nPress Enter to continue", default="")
+
         elif choice == "0":
             break

@@ -1,8 +1,10 @@
 """Core logic for activity logging and statistics."""
 
 import uuid
+import csv
 from datetime import timedelta
-from typing import List, Tuple
+from typing import List, Optional, Tuple
+from pathlib import Path
 
 from habitt.core import config
 from habitt.core.jalali_helper import (
@@ -20,7 +22,9 @@ class TrackerManager:
         self._load()
 
     def _filepath(self):
-        return config.TRACKER_FILE
+        from habitt.core.config import get_tracker_file
+
+        return get_tracker_file()
 
     def _load(self) -> None:
         data = load_json(self._filepath())
@@ -28,6 +32,31 @@ class TrackerManager:
 
     def _save(self) -> None:
         save_json(self._filepath(), [a.to_dict() for a in self.activities])
+
+    def export_data(self, directory: Path, format: str = "json") -> Path:
+        """Export all activities to a file on Desktop. Returns path."""
+        directory.mkdir(parents=True, exist_ok=True)
+        filename = f"tracker_export.{format}"
+        filepath = directory / filename
+
+        activities = self.list_all()
+        if format == "json":
+            save_json(filepath, [a.to_dict() for a in activities])
+        elif format == "csv":
+            with open(filepath, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["ID", "Title", "Start", "End", "Date"])
+                for a in activities:
+                    writer.writerow([a.id, a.title, a.start_time, a.end_time, a.date])
+        elif format == "txt":
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write("TRACKER - Activity Export\n")
+                f.write("=" * 30 + "\n")
+                for a in activities:
+                    f.write(f"{a.title}: {a.start_time} -> {a.end_time}  ({a.date})\n")
+        else:
+            raise ValueError(f"Unsupported format: {format}")
+        return filepath
 
     def add_activity(self, title: str, start_time: str, end_time: str) -> Activity:
         activity = Activity(title=title, start_time=start_time, end_time=end_time)

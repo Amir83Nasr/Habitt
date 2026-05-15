@@ -1,9 +1,10 @@
 """Interactive terminal UI for tico using Rich."""
 
 from typing import Optional, List
+from pathlib import Path
 
 from rich.console import Console
-from rich.prompt import Prompt, IntPrompt
+from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
 
@@ -49,7 +50,7 @@ def _build_task_table(manager: TodoManager, tag: Optional[str] = None) -> Table:
         expand=True,
     )
     table.add_column("#", style=theme["dim"], width=4, justify="center")
-    table.add_column("Status", style="bold", width=6, justify="center")  # new header
+    table.add_column("Status", style="bold", width=6, justify="center")
     table.add_column("Title", style="bold", ratio=3)
     table.add_column("Tag", style=theme["tag"], ratio=1, justify="center")
 
@@ -67,11 +68,21 @@ def _build_task_table(manager: TodoManager, tag: Optional[str] = None) -> Table:
     return table
 
 
+def _parse_numbers(raw: str, theme: dict) -> List[int]:
+    """Convert space-separated numbers to int list, show error if invalid."""
+    try:
+        return [int(x) for x in raw.split()]
+    except ValueError:
+        console.print(
+            f"[{theme['error']}]Invalid input. Use numbers like 1 3 5[/{theme['error']}]"
+        )
+        return []
+
+
 def _remove_multiple(
     manager: TodoManager, items: List[TodoItem], numbers: List[int], theme: dict
 ) -> None:
     """Remove tasks by their row numbers in the given items list."""
-    # Collect IDs to remove (in reverse order to avoid index shift if we were using list indices)
     ids_to_remove = []
     for num in numbers:
         if 1 <= num <= len(items):
@@ -84,6 +95,25 @@ def _remove_multiple(
     console.print(
         f"[{theme['success']}]Removed {len(ids_to_remove)} task(s).[/{theme['success']}]"
     )
+
+
+def _toggle_multiple(
+    manager: TodoManager, items: List[TodoItem], numbers: List[int], theme: dict
+) -> None:
+    """Toggle done status for tasks by their row numbers."""
+    toggled = 0
+    for num in numbers:
+        if 1 <= num <= len(items):
+            task = items[num - 1]
+            updated = manager.toggle(task.id)
+            if updated:
+                toggled += 1
+    if toggled:
+        console.print(
+            f"[{theme['success']}]Toggled {toggled} task(s).[/{theme['success']}]"
+        )
+    else:
+        console.print(f"[{theme['error']}]No valid rows selected.[/{theme['error']}]")
 
 
 def main_menu() -> None:
@@ -101,21 +131,18 @@ def main_menu() -> None:
         console.print("")  # spacer
 
         # ---- Bottom: Action Menu ----
-        menu = (
+        console.print(
             f"[{theme['info']}]1[/] Add   "
             f"[{theme['info']}]2[/] Toggle   "
             f"[{theme['info']}]3[/] Remove   "
             f"[{theme['info']}]4[/] Filter   "
             f"[{theme['info']}]5[/] Show all   "
+            f"[{theme['info']}]6[/] Export   "
             f"[{theme['dim']}]0[/] Back"
         )
-        console.print(menu)
-        console.print()
-
-        choice = Prompt.ask("Choose", choices=["0", "1", "2", "3", "4", "5"])
+        choice = Prompt.ask("Choose", choices=["0", "1", "2", "3", "4", "5", "6"])
 
         if choice == "1":
-            # Add task without clearing the screen
             title = Prompt.ask("Title")
             tag = Prompt.ask("Tag (optional)", default="")
             tag = tag.strip() if tag.strip() else None
@@ -126,40 +153,27 @@ def main_menu() -> None:
             Prompt.ask("Press Enter", default="")
 
         elif choice == "2":
-            # Toggle: use current filter
+            # Toggle (multiple allowed)
             items = manager.list_all(tag=current_tag, include_done=True)
             if not items:
                 Prompt.ask("No tasks to toggle. Press Enter", default="")
                 continue
-            choice_num = IntPrompt.ask("Row number to toggle")
-            if 1 <= choice_num <= len(items):
-                task = items[choice_num - 1]
-                updated = manager.toggle(task.id)
-                if updated:
-                    status = "done" if updated.done else "undone"
-                    console.print(
-                        f"[{theme['success']}]'{updated.title}' marked as {status}.[/{theme['success']}]"
-                    )
-            else:
-                console.print(
-                    f"[{theme['error']}]Invalid row number.[/{theme['error']}]"
-                )
+            raw = Prompt.ask("Row numbers to toggle (space-separated)")
+            numbers = _parse_numbers(raw, theme)
+            if numbers:
+                _toggle_multiple(manager, items, numbers, theme)
             Prompt.ask("Press Enter", default="")
 
         elif choice == "3":
-            # Remove (single or multiple)
+            # Remove (multiple allowed)
             items = manager.list_all(tag=current_tag, include_done=True)
             if not items:
                 Prompt.ask("No tasks to remove. Press Enter", default="")
                 continue
             raw = Prompt.ask("Row numbers to remove (space-separated)")
-            try:
-                numbers = [int(x) for x in raw.split()]
-            except ValueError:
-                console.print(f"[{theme['error']}]Invalid input.[/{theme['error']}]")
-                Prompt.ask("Press Enter", default="")
-                continue
-            _remove_multiple(manager, items, numbers, theme)
+            numbers = _parse_numbers(raw, theme)
+            if numbers:
+                _remove_multiple(manager, items, numbers, theme)
             Prompt.ask("Press Enter", default="")
 
         elif choice == "4":
@@ -169,6 +183,20 @@ def main_menu() -> None:
 
         elif choice == "5":
             current_tag = None  # reset filter
+
+        elif choice == "6":
+            fmt = Prompt.ask("Format (json/csv/txt)", choices=["json", "csv", "txt"])
+            desktop = Path.home() / "Desktop"
+            try:
+                path = manager.export_data(desktop, fmt)
+                console.print(
+                    f"[{theme['success']}]Exported to {path}[/{theme['success']}]"
+                )
+            except Exception as e:
+                console.print(
+                    f"[{theme['error']}]Export failed: {e}[/{theme['error']}]"
+                )
+            Prompt.ask("Press Enter", default="")
 
         elif choice == "0":
             break

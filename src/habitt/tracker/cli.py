@@ -25,21 +25,27 @@ class TimerState:
     total_paused_seconds: float = 0.0
 
 
+from habitt.core.config import get_timer_state_file
+
+
 def _load_timer_state() -> Optional[TimerState]:
-    if not TIMER_STATE_FILE.exists():
+    filepath = get_timer_state_file()
+    if not filepath.exists():
         return None
-    with open(TIMER_STATE_FILE, encoding="utf-8") as f:
+    with open(filepath, "r", encoding="utf-8") as f:
         data = json.load(f)
     return TimerState(**data)
 
 
 def _save_timer_state(state: TimerState) -> None:
-    with open(TIMER_STATE_FILE, "w", encoding="utf-8") as f:
+    filepath = get_timer_state_file()
+    with open(filepath, "w", encoding="utf-8") as f:
         json.dump(asdict(state), f, ensure_ascii=False, indent=2)
 
 
 def _clear_timer_state() -> None:
-    TIMER_STATE_FILE.unlink(missing_ok=True)
+    filepath = get_timer_state_file()
+    filepath.unlink(missing_ok=True)
 
 
 @click.group()
@@ -135,6 +141,20 @@ def stats() -> None:
     """Show statistics for the last 7 days."""
     manager = TrackerManager()
     show_stats(manager)
+
+
+@main.command()
+@click.option(
+    "--format", "-f", "fmt", default="json", type=click.Choice(["json", "csv", "txt"])
+)
+def export(fmt: str) -> None:
+    """Export all activities to Desktop."""
+    from pathlib import Path
+
+    manager = TrackerManager()
+    desktop = Path.home() / "Desktop"
+    path = manager.export_data(desktop, fmt)
+    click.echo(f"Exported to {path}")
 
 
 if __name__ == "__main__":

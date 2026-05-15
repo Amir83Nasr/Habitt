@@ -1,10 +1,32 @@
 """Click-based CLI for quick todo commands."""
 
 import click
+from rich.console import Console
 
-from habitt.core.themes import get_active_theme
 from habitt.tico.todo_manager import TodoManager
-from habitt.tico.tui import _display_items
+from habitt.tico.tui import _build_task_table
+
+console = Console()
+
+
+def _resolve_task_id(manager: TodoManager, identifier: str) -> str:
+    """
+    Try to interpret identifier as a 1-based row number.
+    If it is an integer, return the ID of the task at that position.
+    Otherwise treat it as a task ID directly.
+    """
+    try:
+        num = int(identifier)
+        # Row numbers are 1-based; list is in creation order
+        if 1 <= num <= len(manager.items):
+            return manager.items[num - 1].id
+        else:
+            raise click.BadParameter(f"No task at row {num}.")
+    except ValueError:
+        # Not a number – assume it's an ID
+        if manager.get_by_id(identifier) is None:
+            raise click.BadParameter(f"No task with ID '{identifier}'.")
+        return identifier
 
 
 @click.group()
@@ -28,46 +50,65 @@ def add(title: str, tag: str | None) -> None:
 def list(tag: str | None) -> None:
     """List tasks (use --tag to filter)."""
     manager = TodoManager()
-    # Use the same display function from TUI, which respects active theme
-    _display_items(manager, tag=tag)
+    table = _build_task_table(manager, tag=tag)
+    console.print(table)
 
 
 @main.command()
-@click.argument("task_id")
-def done(task_id: str) -> None:
-    """Mark a task as done."""
+@click.argument("identifier")
+def done(identifier: str) -> None:
+    """Mark a task as done by row number or ID."""
     manager = TodoManager()
+    task_id = _resolve_task_id(manager, identifier)
     item = manager.toggle(task_id)
     if item and item.done:
-        click.echo(f"Task {task_id} marked as done.")
+        click.echo(f"Task '{item.title}' marked as done.")
+    elif item:
+        click.echo(f"Task '{item.title}' is already done.")
     else:
-        click.echo("Task not found or already undone.")
+        click.echo("Operation failed.")
 
 
 @main.command()
-@click.argument("task_id")
-def undo(task_id: str) -> None:
-    """Mark a task as undone."""
+@click.argument("identifier")
+def undo(identifier: str) -> None:
+    """Mark a task as undone by row number or ID."""
     manager = TodoManager()
+    task_id = _resolve_task_id(manager, identifier)
     item = manager.get_by_id(task_id)
     if item and item.done:
         manager.toggle(task_id)
-        click.echo(f"Task {task_id} marked as undone.")
+        click.echo(f"Task '{item.title}' marked as undone.")
     elif item:
-        click.echo(f"Task {task_id} is already undone.")
+        click.echo(f"Task '{item.title}' is already undone.")
     else:
         click.echo("Task not found.")
 
 
 @main.command()
-@click.argument("task_id")
-def remove(task_id: str) -> None:
-    """Remove a task."""
+@click.argument("identifier")
+def remove(identifier: str) -> None:
+    """Remove a task by row number or ID."""
     manager = TodoManager()
+    task_id = _resolve_task_id(manager, identifier)
     if manager.remove(task_id):
-        click.echo(f"Task {task_id} removed.")
+        click.echo(f"Task removed.")
     else:
         click.echo("Task not found.")
+
+
+@main.command()
+@click.option(
+    "--format", "-f", "fmt", default="json", type=click.Choice(["json", "csv", "txt"])
+)
+def export(fmt: str) -> None:
+    """Export all tasks to Desktop."""
+    from pathlib import Path
+
+    manager = TodoManager()
+    desktop = Path.home() / "Desktop"
+    path = manager.export_data(desktop, fmt)
+    click.echo(f"Exported to {path}")
 
 
 if __name__ == "__main__":
