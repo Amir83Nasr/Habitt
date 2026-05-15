@@ -1,6 +1,7 @@
 """Main entry point for habitt launcher (tico + tracker)."""
 
 import click
+import click_completion
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -173,22 +174,24 @@ def settings_main_menu() -> None:
 
 
 def launcher_menu() -> None:
-    """Display the main launcher menu with a clean, modern look."""
+    """Display the main launcher menu with a modern dashboard."""
     while True:
         theme = get_active_theme()
         console.clear()
 
-        # ---- Header ----
+        # Header
         console.rule("H A B I T T", style="bright_blue")
         console.print()
 
-        # ---- Quick Summary ----
+        # ---- Dashboard ----
         from habitt.tico.todo_manager import TodoManager
         from habitt.tracker.tracker_manager import TrackerManager
 
         todo_mgr = TodoManager()
         open_tasks = len(todo_mgr.list_all(include_done=False))
         total_tasks = len(todo_mgr.list_all())
+        done_tasks = total_tasks - open_tasks
+        task_progress = done_tasks / total_tasks if total_tasks > 0 else 0.0
 
         tracker_mgr = TrackerManager()
         today_activities = tracker_mgr.list_today()
@@ -197,22 +200,62 @@ def launcher_menu() -> None:
         mins = int(today_minutes % 60)
         time_str = f"{hours}h {mins}m"
 
-        summary = (
-            f"Tasks: [{theme['info']}]{open_tasks} open[/], {total_tasks} total"
-            f"   |   "
-            f"Today: [{theme['accent']}]{len(today_activities)} entries[/], {time_str}"
+        # Progress bar for tasks
+        from rich.progress import BarColumn, Progress, TextColumn
+
+        progress = Progress(
+            TextColumn("Tasks  "),
+            BarColumn(bar_width=30, style=theme["accent"]),
+            TextColumn(f"  {done_tasks}/{total_tasks}"),
         )
-        console.print(summary)
+        task_bar = progress
+        task_bar.add_task(
+            "", total=total_tasks if total_tasks > 0 else 1, completed=done_tasks
+        )
+
+        # Today's time progress (out of 8h target)
+        target_minutes = 8 * 60
+        time_progress_val = (
+            min(today_minutes / target_minutes, 1.0) if target_minutes > 0 else 0.0
+        )
+        time_progress = Progress(
+            TextColumn("Time   "),
+            BarColumn(bar_width=30, style=theme["clock"]),
+            TextColumn(f"  {time_str} / 8h"),
+        )
+        time_bar = time_progress
+        time_bar.add_task(
+            "",
+            total=target_minutes if target_minutes > 0 else 1,
+            completed=today_minutes,
+        )
+
+        # Arrange in columns
+        from rich.columns import Columns
+        from rich.panel import Panel
+
+        left_panel = Panel(
+            task_bar,
+            title="Tasks",
+            border_style=theme["panel_border"],
+        )
+        right_panel = Panel(
+            time_bar,
+            title="Today's Focus",
+            border_style=theme["panel_border"],
+        )
+        console.print(Columns([left_panel, right_panel]))
         console.print()
 
-        # ---- Options ----
-        console.print(f"  [{theme['info']}]1.[/] Todo")
-        console.print(f"  [{theme['info']}]2.[/] Tracker")
-        console.print(f"  [{theme['info']}]3.[/] Settings")
-        console.print(f"  [{theme['dim']}]0.[/] Exit")
+        # Menu
+        console.print(
+            f"[{theme['info']}]1.[/] Todo   "
+            f"[{theme['info']}]2.[/] Tracker   "
+            f"[{theme['info']}]3.[/] Settings   "
+            f"[{theme['dim']}]0.[/] Exit"
+        )
         console.print()
 
-        # ---- Prompt ----
         prompt = Text("Choose", style=theme["info"])
         prompt.append(" > ", style="white")
         choice = Prompt.ask(prompt, choices=["0", "1", "2", "3"])
@@ -254,6 +297,8 @@ def track() -> None:
 
     tracker_menu()
 
+
+click_completion.init()
 
 if __name__ == "__main__":
     main()

@@ -2,8 +2,10 @@
 
 from zoneinfo import ZoneInfo
 
+from datetime import timedelta
 import jdatetime
 
+from habitt.core.jalali_helper import parse_shamsi_datetime
 from habitt.tracker.tracker_manager import TrackerManager
 
 TEHRAN = ZoneInfo("Asia/Tehran")
@@ -60,27 +62,29 @@ def test_daily_total_minutes(temp_data_dir):
 
 def test_last_days_stats(temp_data_dir, monkeypatch):
     manager = TrackerManager()
-    # mock today to a known date
-    fake_today = jdatetime.datetime(1404, 8, 25, 12, 0, 0, tzinfo=TEHRAN)
-    monkeypatch.setattr(
-        "habitt.tracker.tracker_manager.parse_shamsi_datetime",
-        lambda x: fake_today,
-    )
-    monkeypatch.setattr(
-        "habitt.tracker.tracker_manager.today_shamsi_str",
-        lambda: "1404/08/25",
-    )
 
-    # Add activity for today
-    start = "1404/08/25 10:00:00"
-    end = "1404/08/25 12:00:00"
+    # Add an activity for a known date: today
+    from habitt.core.jalali_helper import today_shamsi_str
+
+    today = today_shamsi_str()
+    start = f"{today} 10:00:00"
+    end = f"{today} 12:00:00"
     manager.add_activity("Long task", start, end)  # 120 min
 
+    # Also add an activity for yesterday (to verify ordering)
+    yesterday_dt = parse_shamsi_datetime(f"{today} 00:00:00") - timedelta(days=1)
+    yesterday_str = yesterday_dt.strftime("%Y/%m/%d")
+    start_y = f"{yesterday_str} 08:00:00"
+    end_y = f"{yesterday_str} 09:00:00"
+    manager.add_activity("Short", start_y, end_y)  # 60 min
+
     stats = manager.last_days_stats(7)
-    # Should have 7 entries, last one for today = 120.0
+    # Should have 7 entries, last two are yesterday and today
     assert len(stats) == 7
-    assert stats[-1][0] == "1404/08/25"
+    assert stats[-1][0] == today
     assert stats[-1][1] == 120.0
-    # Others zero
-    for date_str, mins in stats[:-1]:
+    assert stats[-2][0] == yesterday_str
+    assert stats[-2][1] == 60.0
+    # Earlier days should be zero
+    for date_str, mins in stats[:-2]:
         assert mins == 0.0

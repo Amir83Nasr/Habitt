@@ -35,6 +35,8 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.0",
     "pre-commit>=3.0",
+    "click-completion>=0.5.0",
+    "pytest-cov>=4.0",
 ]
 
 [project.scripts]
@@ -61,7 +63,15 @@ ignore = []
 python_version = "3.9"
 strict = true
 ignore_missing_imports = true
+warn_return_any = true
+warn_unused_configs = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["src/habitt"]
+
+[tool.coverage.report]
+show_missing = true

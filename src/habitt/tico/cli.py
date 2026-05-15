@@ -1,6 +1,8 @@
 """Click-based CLI for quick todo commands."""
 
 import click
+import click_completion
+
 from rich.console import Console
 
 from habitt.tico.todo_manager import TodoManager
@@ -110,6 +112,8 @@ def export(fmt: str) -> None:
     path = manager.export_data(desktop, fmt)
     click.echo(f"Exported to {path}")
 
+
+click_completion.init()
 
 if __name__ == "__main__":
     import sys

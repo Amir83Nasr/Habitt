@@ -6,6 +6,12 @@ help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
+install-completion:
+	@echo "Add to your shell rc file:"
+	@echo 'eval "$$(_HABITT_COMPLETE=source habitt)"'
+	@echo 'eval "$$(_TICO_COMPLETE=source tico)"'
+	@echo 'eval "$$(_TRACKER_COMPLETE=source tracker)"'
+
 install: ## Install the package
 	pip install .
 
@@ -14,6 +20,9 @@ dev-install: ## Install with development dependencies
 
 test: ## Run tests with pytest
 	pytest
+
+test-cov:
+	pytest --cov=src/habitt --cov-report=term --cov-report=html --cov-fail-under=80 tests/
 
 lint: ## Lint source and test files with ruff
 	ruff check src/ tests/

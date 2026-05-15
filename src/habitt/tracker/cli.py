@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 from typing import Optional
 
 import click
+import click_completion
 from rich.console import Console
 
 from habitt.core.config import get_timer_state_file
@@ -157,6 +158,8 @@ def export(fmt: str) -> None:
     path = manager.export_data(desktop, fmt)
     click.echo(f"Exported to {path}")
 
+
+click_completion.init()
 
 if __name__ == "__main__":
     import sys
