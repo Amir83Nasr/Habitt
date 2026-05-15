@@ -1,8 +1,8 @@
 """Tests for TrackerManager."""
 
+from datetime import timedelta
 from zoneinfo import ZoneInfo
 
-from datetime import timedelta
 import jdatetime
 
 from habitt.core.jalali_helper import parse_shamsi_datetime

@@ -31,6 +31,7 @@ lint-fix: ## Lint and fix source and test files with ruff
 	ruff check --fix src/ tests/
 
 format: ## Format code with black and ruff
+	isort src/ tests/
 	black src/ tests/
 	ruff format src/ tests/
 

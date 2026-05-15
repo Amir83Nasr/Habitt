@@ -54,3 +54,17 @@ def set_data_dir(path_str: str) -> None:
     config["data_dir"] = str(new_path)
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
+
+
+def get_plugins_dir() -> Path:
+    """Return the user plugins directory."""
+    plugins_dir = get_data_dir() / "plugins"
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+    return plugins_dir
+
+
+def get_builtin_plugins_dir() -> Path:
+    """Return the built-in plugins directory inside the package."""
+    import habitt
+
+    return Path(habitt.__file__).parent / "plugins"

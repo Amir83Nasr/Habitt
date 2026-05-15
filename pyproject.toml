@@ -26,7 +26,12 @@ classifiers = [
     "Topic :: Office/Business :: Scheduling",
 ]
 
-dependencies = ["rich>=13.0.0", "jdatetime>=4.1.0", "click>=8.1.0"]
+dependencies = [
+    "rich>=13.0.0",
+    "jdatetime>=4.1.0",
+    "click>=8.1.0",
+    "readchar>=4.0.0",
+]
 
 [project.optional-dependencies]
 dev = [

@@ -2,7 +2,6 @@
 
 import click
 import click_completion
-
 from rich.console import Console
 
 from habitt.tico.todo_manager import TodoManager

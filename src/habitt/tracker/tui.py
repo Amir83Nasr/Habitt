@@ -1,4 +1,4 @@
-"""Interactive terminal UI for tracker using Rich – clean redesign."""
+"""Interactive terminal UI for tracker using Rich – with Pomodoro timer."""
 
 import select
 import sys
@@ -11,18 +11,15 @@ from rich.console import Console
 from rich.layout import Layout
 from rich.live import Live
 from rich.panel import Panel
+from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
 
-from habitt.core.jalali_helper import (
-    format_shamsi_datetime,
-    now_tehran,
-    shamsi_diff_seconds,
-    today_shamsi_str,
-)
+from habitt.core.jalali_helper import (format_shamsi_datetime, now_shamsi_str,
+                                       now_tehran, shamsi_diff_seconds,
+                                       today_shamsi_str)
 from habitt.core.themes import get_active_theme
-from habitt.core.validators import prompt_shamsi_date, prompt_time
 from habitt.tracker.tracker_manager import TrackerManager
 
 console = Console()
@@ -39,16 +36,6 @@ def _get_key_nonblocking() -> Optional[str]:
         if select.select([sys.stdin], [], [], 0)[0]:
             return sys.stdin.read(1)
         return None
-
-
-def _zero_pad_time(text: str) -> str:
-    """Convert '7:9' -> '07:09', '12:5' -> '12:05', etc."""
-    if ":" not in text:
-        raise ValueError("Time must contain ':'")
-    h, m = text.split(":", 1)
-    h = h.zfill(2)
-    m = m.zfill(2)
-    return f"{h}:{m}"
 
 
 class TimerSession:
@@ -158,6 +145,107 @@ class TimerSession:
         return layout
 
 
+class PomodoroSession:
+    """Handles a full pomodoro cycle: 25min work, 5min break, long break after 4."""
+
+    WORK_MIN = 25
+    SHORT_BREAK_MIN = 5
+    LONG_BREAK_MIN = 15
+    CYCLES_BEFORE_LONG = 4
+
+    def __init__(self) -> None:
+        self.cycle = 0
+        self.is_work = True
+        self.cancelled = False
+
+    def run(self, manager: TrackerManager) -> None:
+        theme = get_active_theme()
+        while not self.cancelled:
+            self.cycle += 1
+            # Work session
+            if not self._run_phase("Work", self.WORK_MIN, manager, theme):
+                break
+            # Break
+            if self.cycle % self.CYCLES_BEFORE_LONG == 0:
+                if not self._run_phase(
+                    "Long Break", self.LONG_BREAK_MIN, manager, theme
+                ):
+                    break
+            else:
+                if not self._run_phase("Break", self.SHORT_BREAK_MIN, manager, theme):
+                    break
+
+    def _run_phase(
+        self, label: str, minutes: int, manager: TrackerManager, theme: dict
+    ) -> bool:
+        """Run one phase (work or break). Return False if user quit."""
+        total_seconds = minutes * 60
+        start_time = now_tehran()
+        paused = False
+        pause_start = None
+        total_paused = timedelta(0)
+
+        if sys.platform != "win32":
+            import termios
+            import tty
+
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            tty.setcbreak(fd)
+
+        try:
+            progress = Progress(
+                TextColumn(f"[{theme['info']}]{label}[/{theme['info']}] "),
+                BarColumn(bar_width=40, style=theme["accent"]),
+                TaskProgressColumn(),
+                TextColumn("remaining"),
+            )
+            task = progress.add_task("", total=total_seconds)
+
+            with Live(progress, refresh_per_second=10, screen=True) as live:
+                while True:
+                    elapsed = (now_tehran() - start_time) - total_paused
+                    remaining = total_seconds - elapsed.total_seconds()
+                    if remaining <= 0:
+                        break
+                    progress.update(task, completed=elapsed.total_seconds())
+                    live.update(progress)
+
+                    key = _get_key_nonblocking()
+                    if key:
+                        if key.lower() == "p" and not paused:
+                            paused = True
+                            pause_start = now_tehran()
+                        elif key.lower() == "r" and paused:
+                            if pause_start:
+                                total_paused += now_tehran() - pause_start
+                                pause_start = None
+                            paused = False
+                        elif key.lower() == "q":
+                            self.cancelled = True
+                            return False
+                    time.sleep(0.1)
+        finally:
+            if sys.platform != "win32":
+                import termios
+
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+        # Save activity only for work phases (not breaks)
+        if label == "Work":
+            end_time = now_tehran()
+            title = f"Pomodoro #{self.cycle}"
+            start_str = format_shamsi_datetime(start_time)
+            end_str = format_shamsi_datetime(end_time)
+            manager.add_activity(title, start_str, end_str)
+
+        # Bell notification
+        sys.stdout.write("\a")
+        sys.stdout.flush()
+
+        return True
+
+
 def _parse_numbers(raw: str, theme: dict) -> List[int]:
     try:
         return [int(x) for x in raw.split()]
@@ -171,7 +259,6 @@ def _parse_numbers(raw: str, theme: dict) -> List[int]:
 def _build_log_table(
     manager: TrackerManager, date_filter: Optional[str] = None
 ) -> Table:
-    """Build a table of activities filtered by date (all if None)."""
     theme = get_active_theme()
     if date_filter:
         activities = [a for a in manager.activities if a.date == date_filter]
@@ -242,27 +329,25 @@ def _build_stats_table(manager: TrackerManager) -> Table:
 
 
 def main_menu() -> None:
-    """Entry point for tracker TUI with single-letter commands."""
+    """Entry point for tracker TUI with single-letter commands + Pomodoro."""
     manager = TrackerManager()
 
     while True:
         theme = get_active_theme()
         console.clear()
 
-        # Header with rule
         console.rule("T R A C K E R", style=theme["info"])
         console.print()
 
-        # Today's log (default view)
         today_table = _build_log_table(manager, date_filter=today_shamsi_str())
         console.print(today_table)
         console.print()
 
-        # Menu
         console.print(
             f"[{theme['info']}]L[/]og  "
             f"[{theme['info']}]A[/]dd  "
             f"[{theme['info']}]T[/]imer  "
+            f"[{theme['info']}]P[/]omodoro  "
             f"[{theme['info']}]R[/]emove  "
             f"[{theme['info']}]S[/]tats  "
             f"[{theme['info']}]E[/]xport  "
@@ -275,7 +360,6 @@ def main_menu() -> None:
         cmd = Prompt.ask(prompt).strip().lower()
 
         if cmd == "l":
-            # Log: view specific date or all
             date_input = Prompt.ask("Date (YYYY/MM/DD) or empty for all", default="")
             if date_input.strip():
                 log_table = _build_log_table(manager, date_filter=date_input.strip())
@@ -286,26 +370,26 @@ def main_menu() -> None:
 
         elif cmd == "a":
             title = Prompt.ask("Title")
-            # Date with default today
-            date_str = prompt_shamsi_date(
-                "Date (YYYY/MM/DD) [default today]", default_today=True
+            today = today_shamsi_str()
+            default_start_hm = now_tehran().strftime("%H:%M")
+            start_hm = Prompt.ask(
+                f"Start time (HH:MM) [default: {default_start_hm}]",
+                default=default_start_hm,
             )
-            # Start time (required)
-            start_hm = prompt_time("Start time (HH:MM)")
-            # End time default now
             default_end_hm = now_tehran().strftime("%H:%M")
-            end_hm = prompt_time(
-                "End time (HH:MM) [default: {default_end_hm}]", default=default_end_hm
+            end_hm = Prompt.ask(
+                f"End time (HH:MM) [default: {default_end_hm}]",
+                default=default_end_hm,
             )
-            start_full = f"{date_str} {start_hm}:00"
-            end_full = f"{date_str} {end_hm}:00"
+            start_full = f"{today} {start_hm}:00"
+            end_full = f"{today} {end_hm}:00"
             try:
                 manager.add_activity(title, start_full, end_full)
                 console.print(
                     f"[{theme['success']}]Activity added.[/{theme['success']}]"
                 )
             except ValueError as e:
-                console.print(f"[{theme['error']}]Error: {e}[/{theme['error']}]")
+                console.print(f"[{theme['error']}]Invalid time: {e}[/{theme['error']}]")
             Prompt.ask("Press Enter", default="")
 
         elif cmd == "t":
@@ -323,6 +407,14 @@ def main_menu() -> None:
                 )
             else:
                 console.print(f"[{theme['dim']}]Timer cancelled.[/{theme['dim']}]")
+            Prompt.ask("Press Enter", default="")
+
+        elif cmd == "p":
+            session = PomodoroSession()
+            session.run(manager)
+            console.print(
+                f"[{theme['success']}]Pomodoro session ended.[/{theme['success']}]"
+            )
             Prompt.ask("Press Enter", default="")
 
         elif cmd == "r":
@@ -353,7 +445,6 @@ def main_menu() -> None:
             Prompt.ask("Press Enter to return", default="")
 
         elif cmd == "e":
-            # Export submenu with default dates
             today = today_shamsi_str()
             export_choice = Prompt.ask(
                 "Export: (1) All, (2) Specific date, (3) Date range",
@@ -372,7 +463,7 @@ def main_menu() -> None:
                         f"Date (YYYY/MM/DD) [default: {today}]", default=today
                     )
                     path = manager.export_date_data(desktop, date, fmt)
-                else:  # range
+                else:
                     start = Prompt.ask(
                         f"Start date (YYYY/MM/DD) [default: {today}]", default=today
                     )
@@ -394,6 +485,6 @@ def main_menu() -> None:
 
         else:
             console.print(
-                f"[{theme['error']}]Unknown command. Use L, A, T, R, S, E, Q.[/{theme['error']}]"
+                f"[{theme['error']}]Unknown command. Use L, A, T, P, R, S, E, Q.[/{theme['error']}]"
             )
             Prompt.ask("Press Enter", default="")

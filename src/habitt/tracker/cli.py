@@ -9,12 +9,8 @@ import click_completion
 from rich.console import Console
 
 from habitt.core.config import get_timer_state_file
-from habitt.core.jalali_helper import (
-    now_shamsi_str,
-    now_tehran,
-    parse_shamsi_datetime,
-    today_shamsi_str,
-)
+from habitt.core.jalali_helper import (now_shamsi_str, now_tehran,
+                                       parse_shamsi_datetime, today_shamsi_str)
 from habitt.tracker.tracker_manager import TrackerManager
 from habitt.tracker.tui import _build_log_table, _build_stats_table
 

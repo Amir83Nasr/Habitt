@@ -8,11 +8,8 @@ from pathlib import Path
 from typing import List, Tuple
 
 from habitt.core import config
-from habitt.core.jalali_helper import (
-    parse_shamsi_datetime,
-    shamsi_diff_seconds,
-    today_shamsi_str,
-)
+from habitt.core.jalali_helper import (parse_shamsi_datetime,
+                                       shamsi_diff_seconds, today_shamsi_str)
 from habitt.core.storage import load_json, save_json
 from habitt.tracker.models import Activity
 

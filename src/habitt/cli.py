@@ -1,33 +1,23 @@
-"""Main entry point for habitt launcher (tico + tracker)."""
+"""Main entry point for habitt launcher (tico + tracker + plugins)."""
 
 import click
 import click_completion
+from rich.columns import Columns
 from rich.console import Console
 from rich.panel import Panel
+from rich.progress import BarColumn, Progress, TextColumn
 from rich.prompt import Prompt
 from rich.text import Text
 
-from habitt.core.config import get_data_dir, set_data_dir
+from habitt.core.config import (get_builtin_plugins_dir, get_data_dir,
+                                get_plugins_dir, set_data_dir)
 from habitt.core.jalali_helper import today_shamsi_str
+from habitt.core.plugin_base import PluginBase, discover_plugins
 from habitt.core.themes import PRESETS, get_active_theme, save_theme
 
+plugins = discover_plugins(get_plugins_dir(), get_builtin_plugins_dir())
+click_completion.init()
 console = Console()
-
-
-def _get_current_theme_name() -> str:
-    """Return the name of the currently active theme."""
-    import json
-
-    try:
-        from habitt.core.config import CONFIG_FILE
-
-        if CONFIG_FILE.exists():
-            with open(CONFIG_FILE, encoding="utf-8") as f:
-                config = json.load(f)
-            return config.get("theme", "blue_purple")
-    except Exception:
-        pass
-    return "blue_purple"
 
 
 def theme_menu() -> None:
@@ -35,7 +25,7 @@ def theme_menu() -> None:
     theme_names = list(PRESETS.keys())
     current = _get_current_theme_name()
     while True:
-        theme = get_active_theme()  # هر بار تم جدید خونده بشه
+        theme = get_active_theme()
         console.clear()
         console.rule("T H E M E", style=theme["info"])
         console.print()
@@ -87,6 +77,7 @@ def export_all_data() -> None:
         )
     except Exception as e:
         console.print(f"[{theme['error']}]Export failed: {e}[/{theme['error']}]")
+    Prompt.ask("Press Enter to continue", default="")
 
 
 def change_data_dir() -> None:
@@ -147,7 +138,7 @@ def reset_all_data() -> None:
 def settings_main_menu() -> None:
     """Main settings menu – clean style."""
     while True:
-        theme = get_active_theme()  # هر بار تم جدید
+        theme = get_active_theme()
         console.clear()
         console.rule("S E T T I N G S", style=theme["info"])
         console.print()
@@ -173,8 +164,52 @@ def settings_main_menu() -> None:
             break
 
 
+def _get_current_theme_name() -> str:
+    """Return the name of the currently active theme."""
+    import json
+
+    try:
+        from habitt.core.config import CONFIG_FILE
+
+        if CONFIG_FILE.exists():
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                config = json.load(f)
+            return config.get("theme", "blue_purple")
+    except Exception:
+        pass
+    return "blue_purple"
+
+
+def plugins_menu(plugins: list) -> None:
+    """Sub-menu showing available plugins."""
+    theme = get_active_theme()
+    while True:
+        console.clear()
+        console.rule("P L U G I N S", style=theme["info"])
+        console.print()
+        if not plugins:
+            console.print("No plugins installed.")
+        else:
+            for i, plugin in enumerate(plugins, start=1):
+                console.print(
+                    f"  [{theme['info']}]{i}.[/] {plugin.name} - {plugin.description}"
+                )
+        console.print(f"  [{theme['dim']}]0.[/] Back")
+        console.print()
+
+        prompt = Text("Choose", style=theme["info"])
+        prompt.append(" > ", style="white")
+        choices = ["0"] + [str(i) for i in range(1, len(plugins) + 1)]
+        choice = Prompt.ask(prompt, choices=choices)
+        if choice == "0":
+            break
+        idx = int(choice) - 1
+        if 0 <= idx < len(plugins):
+            plugins[idx].run_tui()
+
+
 def launcher_menu() -> None:
-    """Display the main launcher menu with a modern dashboard."""
+    """Display the main launcher menu with dynamic plugin entries."""
     while True:
         theme = get_active_theme()
         console.clear()
@@ -183,7 +218,7 @@ def launcher_menu() -> None:
         console.rule("H A B I T T", style="bright_blue")
         console.print()
 
-        # ---- Dashboard ----
+        # Dashboard
         from habitt.tico.todo_manager import TodoManager
         from habitt.tracker.tracker_manager import TrackerManager
 
@@ -191,7 +226,6 @@ def launcher_menu() -> None:
         open_tasks = len(todo_mgr.list_all(include_done=False))
         total_tasks = len(todo_mgr.list_all())
         done_tasks = total_tasks - open_tasks
-        task_progress = done_tasks / total_tasks if total_tasks > 0 else 0.0
 
         tracker_mgr = TrackerManager()
         today_activities = tracker_mgr.list_today()
@@ -200,24 +234,17 @@ def launcher_menu() -> None:
         mins = int(today_minutes % 60)
         time_str = f"{hours}h {mins}m"
 
-        # Progress bar for tasks
-        from rich.progress import BarColumn, Progress, TextColumn
-
-        progress = Progress(
+        task_progress = Progress(
             TextColumn("Tasks  "),
             BarColumn(bar_width=30, style=theme["accent"]),
             TextColumn(f"  {done_tasks}/{total_tasks}"),
         )
-        task_bar = progress
+        task_bar = task_progress
         task_bar.add_task(
             "", total=total_tasks if total_tasks > 0 else 1, completed=done_tasks
         )
 
-        # Today's time progress (out of 8h target)
         target_minutes = 8 * 60
-        time_progress_val = (
-            min(today_minutes / target_minutes, 1.0) if target_minutes > 0 else 0.0
-        )
         time_progress = Progress(
             TextColumn("Time   "),
             BarColumn(bar_width=30, style=theme["clock"]),
@@ -230,35 +257,24 @@ def launcher_menu() -> None:
             completed=today_minutes,
         )
 
-        # Arrange in columns
-        from rich.columns import Columns
-        from rich.panel import Panel
-
-        left_panel = Panel(
-            task_bar,
-            title="Tasks",
-            border_style=theme["panel_border"],
-        )
+        left_panel = Panel(task_bar, title="Tasks", border_style=theme["panel_border"])
         right_panel = Panel(
-            time_bar,
-            title="Today's Focus",
-            border_style=theme["panel_border"],
+            time_bar, title="Today's Focus", border_style=theme["panel_border"]
         )
         console.print(Columns([left_panel, right_panel]))
         console.print()
 
         # Menu
-        console.print(
-            f"[{theme['info']}]1.[/] Todo   "
-            f"[{theme['info']}]2.[/] Tracker   "
-            f"[{theme['info']}]3.[/] Settings   "
-            f"[{theme['dim']}]0.[/] Exit"
-        )
+        console.print(f"  [{theme['info']}]1.[/] Todo")
+        console.print(f"  [{theme['info']}]2.[/] Tracker")
+        console.print(f"  [{theme['info']}]3.[/] Settings")
+        console.print(f"  [{theme['info']}]4.[/] Plugins")
+        console.print(f"  [{theme['dim']}]0.[/] Exit")
         console.print()
 
         prompt = Text("Choose", style=theme["info"])
         prompt.append(" > ", style="white")
-        choice = Prompt.ask(prompt, choices=["0", "1", "2", "3"])
+        choice = Prompt.ask(prompt, choices=["0", "1", "2", "3", "4"])
 
         if choice == "1":
             from habitt.tico.tui import main_menu as tico_menu
@@ -270,6 +286,9 @@ def launcher_menu() -> None:
             tracker_menu()
         elif choice == "3":
             settings_main_menu()
+        elif choice == "4":
+            plugins = discover_plugins(get_plugins_dir(), get_builtin_plugins_dir())
+            plugins_menu(plugins)
         elif choice == "0":
             break
 
@@ -277,7 +296,7 @@ def launcher_menu() -> None:
 @click.group(invoke_without_command=True)
 @click.pass_context
 def main(ctx: click.Context) -> None:
-    """Habitt - the launcher for tico and tracker."""
+    """Habitt - the launcher for tico and tracker and plugins."""
     if ctx.invoked_subcommand is None:
         launcher_menu()
 
@@ -298,7 +317,32 @@ def track() -> None:
     tracker_menu()
 
 
-click_completion.init()
+@main.command("plugins")
+def list_plugins() -> None:
+    """List all installed plugins."""
+    plugins = discover_plugins(get_plugins_dir(), get_builtin_plugins_dir())
+    if not plugins:
+        console.print("[dim]No plugins found.[/dim]")
+    else:
+        for plugin in plugins:
+            console.print(f" - {plugin.name}: {plugin.description}")
+
+
+@main.command("plugin")
+@click.argument("name")
+@click.argument("action", required=False, default="tui")
+def run_plugin(name: str, action: str) -> None:
+    """Run a plugin by name (default: tui)."""
+    plugins = discover_plugins(get_plugins_dir(), get_builtin_plugins_dir())
+    for plugin in plugins:
+        if plugin.name == name:
+            if action == "tui":
+                plugin.run_tui()
+            else:
+                plugin.cli([action])
+            return
+    console.print(f"[red]Plugin '{name}' not found.[/red]")
+
 
 if __name__ == "__main__":
     main()
