@@ -4,11 +4,11 @@ import click
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
-from rich.columns import Columns
+from rich.text import Text
 
 from habitt.core.themes import get_active_theme, save_theme, PRESETS
-from habitt.core.jalali_helper import today_shamsi_str
 from habitt.core.config import get_data_dir, set_data_dir
+from habitt.core.jalali_helper import today_shamsi_str
 
 console = Console()
 
@@ -29,49 +29,6 @@ def _get_current_theme_name() -> str:
     return "blue_purple"
 
 
-def settings_menu() -> None:
-    """Display theme settings."""
-    theme = get_active_theme()
-    theme_names = list(PRESETS.keys())
-    current_theme = _get_current_theme_name()
-
-    while True:
-        console.clear()
-        console.print(Panel.fit("Settings", style=theme["app_title"]))
-        console.print()
-        console.print(f"Current theme: [bold]{current_theme}[/bold]\n")
-        console.print("Available themes:")
-        for i, name in enumerate(theme_names, start=1):
-            marker = " (active)" if name == current_theme else ""
-            console.print(f"  [{theme['info']}]{i}[/{theme['info']}] {name}{marker}")
-        console.print(f"  [{theme['dim']}]0[/{theme['dim']}] Back")
-        console.print()
-
-        choice = Prompt.ask(
-            "Your choice", choices=[str(i) for i in range(len(theme_names) + 1)]
-        )
-        if choice == "0":
-            break
-        idx = int(choice) - 1
-        if 0 <= idx < len(theme_names):
-            new_theme = theme_names[idx]
-            try:
-                save_theme(new_theme)
-                theme = get_active_theme()
-                current_theme = new_theme
-                console.print(
-                    f"[{theme['success']}]Theme changed to '{new_theme}'.[/{theme['success']}]"
-                )
-            except Exception as e:
-                console.print(
-                    f"[{theme['error']}]Failed to save theme: {e}[/{theme['error']}]"
-                )
-            Prompt.ask("\nPress Enter to continue", default="")
-        else:
-            console.print(f"[{theme['error']}]Invalid choice.[/{theme['error']}]")
-            Prompt.ask("\nPress Enter to continue", default="")
-
-
 def theme_menu() -> None:
     """Sub-menu for theme selection."""
     theme = get_active_theme()
@@ -79,7 +36,7 @@ def theme_menu() -> None:
     current = _get_current_theme_name()
     while True:
         console.clear()
-        console.print(Panel.fit("Theme Settings", style=theme["app_title"]))
+        console.print(Panel.fit("Theme Settings", style=theme["panel_border"]))
         console.print(f"Current theme: [bold]{current}[/bold]\n")
         for i, name in enumerate(theme_names, start=1):
             marker = " (active)" if name == current else ""
@@ -128,37 +85,11 @@ def export_all_data() -> None:
         console.print(f"[{theme['error']}]Export failed: {e}[/{theme['error']}]")
 
 
-def settings_main_menu() -> None:
-    """Main settings menu with sub-options."""
-    theme = get_active_theme()
-    while True:
-        console.clear()
-        console.print(Panel.fit("Settings", style=theme["app_title"]))
-        console.print(f"[{theme['info']}]1[/] Theme")
-        console.print(f"[{theme['info']}]2[/] Export All Data")
-        console.print(f"[{theme['info']}]3[/] Change Data Directory")
-        console.print(f"[{theme['error']}]4[/] Reset All Data")
-        console.print(f"[{theme['dim']}]0[/] Back")
-        console.print()
-        choice = Prompt.ask("Choose", choices=["0", "1", "2", "3", "4"])
-        if choice == "1":
-            theme_menu()
-        elif choice == "2":
-            export_all_data()
-            Prompt.ask("Press Enter to continue", default="")
-        elif choice == "3":
-            change_data_dir()
-        elif choice == "4":
-            reset_all_data()
-        elif choice == "0":
-            break
-
-
 def change_data_dir() -> None:
     """Prompt user for a new data directory and save it."""
     theme = get_active_theme()
     console.clear()
-    console.print(Panel.fit("Change Data Directory", style=theme["app_title"]))
+    console.print(Panel.fit("Change Data Directory", style=theme["panel_border"]))
     current = get_data_dir()
     console.print(f"Current data directory: [bold]{current}[/bold]\n")
     new_path = Prompt.ask("Enter new data directory path")
@@ -209,22 +140,52 @@ def reset_all_data() -> None:
     Prompt.ask("Press Enter to continue", default="")
 
 
+def settings_main_menu() -> None:
+    """Main settings menu with sub-options."""
+    theme = get_active_theme()
+    while True:
+        console.clear()
+        console.print(Panel.fit("Settings", style=theme["panel_border"]))
+        console.print(f"\n[{theme['info']}][1] Theme")
+        console.print(f"[{theme['info']}][2] Export All Data")
+        console.print(f"[{theme['info']}][3] Change Data Directory")
+        console.print(f"[{theme['error']}][4] Reset All Data")
+        console.print(f"[{theme['dim']}][0] Back")
+        console.print()
+        choice = Prompt.ask(">", choices=["0", "1", "2", "3", "4"])
+        if choice == "1":
+            theme_menu()
+        elif choice == "2":
+            export_all_data()
+            Prompt.ask("Press Enter to continue", default="")
+        elif choice == "3":
+            change_data_dir()
+        elif choice == "4":
+            reset_all_data()
+        elif choice == "0":
+            break
+
+
 def launcher_menu() -> None:
-    """Display the main launcher menu with quick stats."""
+    """Display the main launcher menu with a clean, modern look."""
     while True:
         theme = get_active_theme()
         console.clear()
 
-        # Header
-        console.print(Panel.fit("HABITT", style=theme["app_title"]))
+        # ---- Header ----
+        title = Text("H A B I T T", style="bold bright_blue")
+        console.print(title, justify="center")
+        console.print("─" * console.width, style=theme["dim"])
+        console.print()
 
-        # Quick stats
+        # ---- Quick Summary ----
         from habitt.tico.todo_manager import TodoManager
         from habitt.tracker.tracker_manager import TrackerManager
 
         todo_mgr = TodoManager()
         open_tasks = len(todo_mgr.list_all(include_done=False))
         total_tasks = len(todo_mgr.list_all())
+
         tracker_mgr = TrackerManager()
         today_activities = tracker_mgr.list_today()
         today_minutes = tracker_mgr.daily_total_minutes(today_shamsi_str())
@@ -232,27 +193,25 @@ def launcher_menu() -> None:
         mins = int(today_minutes % 60)
         time_str = f"{hours}h {mins}m"
 
-        left = Panel(
-            f"[bold]Todo[/bold]\nOpen: {open_tasks}\nTotal: {total_tasks}",
-            style=theme["panel_border"],
+        summary = (
+            f"Tasks: [{theme['info']}]{open_tasks} open[/], {total_tasks} total"
+            f"   |   "
+            f"Today: [{theme['accent']}]{len(today_activities)} entries[/], {time_str}"
         )
-        right = Panel(
-            f"[bold]Tracker Today[/bold]\nEntries: {len(today_activities)}\nTime: {time_str}",
-            style=theme["panel_border"],
-        )
-        console.print(Columns([left, right]))
-        console.print("")
-
-        # Menu
-        console.print(
-            f"[{theme['info']}]1[/] Todo (tico)   "
-            f"[{theme['info']}]2[/] Tracker   "
-            f"[{theme['info']}]3[/] Settings   "
-            f"[{theme['dim']}]0[/] Exit"
-        )
+        console.print(summary)
         console.print()
 
-        choice = Prompt.ask("Choose", choices=["0", "1", "2", "3"])
+        # ---- Options ----
+        console.print(f"  [{theme['info']}]1.[/] Todo")
+        console.print(f"  [{theme['info']}]2.[/] Tracker")
+        console.print(f"  [{theme['info']}]3.[/] Settings")
+        console.print(f"  [{theme['dim']}]0.[/] Exit")
+        console.print()
+
+        # ---- Prompt ----
+        prompt = Text("Choose", style=theme["info"])
+        prompt.append(" > ", style="white")
+        choice = Prompt.ask(prompt, choices=["0", "1", "2", "3"])
 
         if choice == "1":
             from habitt.tico.tui import main_menu as tico_menu
