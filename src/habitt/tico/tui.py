@@ -1,7 +1,6 @@
-"""Interactive terminal UI for tico using Rich."""
+"""Interactive terminal UI for tico using Rich – minimalist redesign."""
 
-from typing import Optional, List
-from pathlib import Path
+from typing import List, Optional
 
 from rich.console import Console
 from rich.prompt import Prompt
@@ -9,20 +8,18 @@ from rich.table import Table
 from rich.text import Text
 
 from habitt.core.themes import get_active_theme
-from habitt.tico.todo_manager import TodoManager, TodoItem
+from habitt.tico.todo_manager import TodoItem, TodoManager
 
 console = Console()
 
 
 def _render_checkbox(done: bool, theme: dict) -> Text:
-    """Return a styled checkbox: [x] for done, [ ] for open."""
     if done:
         return Text("[x]", style=theme["checkbox_done"])
     return Text("[ ]", style=theme["checkbox_open"])
 
 
 def _render_title(item: TodoItem, theme: dict) -> Text:
-    """Render task title: strikethrough and dim if done, bold if not."""
     style = theme["dim"] if item.done else "bold"
     text = Text(item.title, style=style)
     if item.done:
@@ -31,14 +28,12 @@ def _render_title(item: TodoItem, theme: dict) -> Text:
 
 
 def _tag_str(tag: Optional[str], theme: dict) -> Text:
-    """Render tag with color."""
     if tag:
         return Text(f"#{tag}", style=theme["tag"])
     return Text("")
 
 
 def _build_task_table(manager: TodoManager, tag: Optional[str] = None) -> Table:
-    """Build a Rich Table of tasks with row numbers, status, title, tag."""
     theme = get_active_theme()
     items = manager.list_all(tag=tag, include_done=True)
 
@@ -69,55 +64,17 @@ def _build_task_table(manager: TodoManager, tag: Optional[str] = None) -> Table:
 
 
 def _parse_numbers(raw: str, theme: dict) -> List[int]:
-    """Convert space-separated numbers to int list, show error if invalid."""
     try:
         return [int(x) for x in raw.split()]
     except ValueError:
         console.print(
-            f"[{theme['error']}]Invalid input. Use numbers like 1 3 5[/{theme['error']}]"
+            f"[{theme['error']}]Invalid input. Use numbers separated by spaces.[/{theme['error']}]"
         )
         return []
 
 
-def _remove_multiple(
-    manager: TodoManager, items: List[TodoItem], numbers: List[int], theme: dict
-) -> None:
-    """Remove tasks by their row numbers in the given items list."""
-    ids_to_remove = []
-    for num in numbers:
-        if 1 <= num <= len(items):
-            ids_to_remove.append(items[num - 1].id)
-    if not ids_to_remove:
-        console.print(f"[{theme['error']}]No valid rows selected.[/{theme['error']}]")
-        return
-    for task_id in ids_to_remove:
-        manager.remove(task_id)
-    console.print(
-        f"[{theme['success']}]Removed {len(ids_to_remove)} task(s).[/{theme['success']}]"
-    )
-
-
-def _toggle_multiple(
-    manager: TodoManager, items: List[TodoItem], numbers: List[int], theme: dict
-) -> None:
-    """Toggle done status for tasks by their row numbers."""
-    toggled = 0
-    for num in numbers:
-        if 1 <= num <= len(items):
-            task = items[num - 1]
-            updated = manager.toggle(task.id)
-            if updated:
-                toggled += 1
-    if toggled:
-        console.print(
-            f"[{theme['success']}]Toggled {toggled} task(s).[/{theme['success']}]"
-        )
-    else:
-        console.print(f"[{theme['error']}]No valid rows selected.[/{theme['error']}]")
-
-
 def main_menu() -> None:
-    """Main TUI loop: always show tasks on top, actions at bottom."""
+    """Main TUI loop: tasks always on top, single-letter commands."""
     manager = TodoManager()
     current_tag: Optional[str] = None
 
@@ -125,35 +82,41 @@ def main_menu() -> None:
         theme = get_active_theme()
         console.clear()
 
-        # ---- Top: Task Table ----
+        # ---- Header ----
+        console.rule("T I C O", style=theme["info"])
+        console.print()
+
+        # ---- Task table ----
         task_table = _build_task_table(manager, tag=current_tag)
         console.print(task_table)
-        console.print("")  # spacer
+        console.print()
 
-        # ---- Bottom: Action Menu ----
+        # ---- Command bar ----
         console.print(
-            f"[{theme['info']}]1[/] Add   "
-            f"[{theme['info']}]2[/] Toggle   "
-            f"[{theme['info']}]3[/] Remove   "
-            f"[{theme['info']}]4[/] Filter   "
-            f"[{theme['info']}]5[/] Show all   "
-            f"[{theme['info']}]6[/] Export   "
-            f"[{theme['dim']}]0[/] Back"
+            f"[{theme['info']}]A[/]dd  "
+            f"[{theme['info']}]T[/]oggle  "
+            f"[{theme['info']}]R[/]emove  "
+            f"[{theme['info']}]F[/]ilter  "
+            f"[{theme['info']}]S[/]how all  "
+            f"[{theme['dim']}]Q[/]uit"
         )
-        choice = Prompt.ask("Choose", choices=["0", "1", "2", "3", "4", "5", "6"])
+        console.print()
 
-        if choice == "1":
+        prompt = Text("Action", style=theme["info"])
+        prompt.append(" > ", style="white")
+        cmd = Prompt.ask(prompt).strip().lower()
+
+        if cmd == "a":
+            # Add
             title = Prompt.ask("Title")
             tag = Prompt.ask("Tag (optional)", default="")
             tag = tag.strip() if tag.strip() else None
             manager.add(title, tag)
-            console.print(
-                f"[{theme['success']}]Task added: {title}[/{theme['success']}]"
-            )
+            console.print(f"[{theme['success']}]Added: {title}[/{theme['success']}]")
             Prompt.ask("Press Enter", default="")
 
-        elif choice == "2":
-            # Toggle (multiple allowed)
+        elif cmd == "t":
+            # Toggle
             items = manager.list_all(tag=current_tag, include_done=True)
             if not items:
                 Prompt.ask("No tasks to toggle. Press Enter", default="")
@@ -161,11 +124,24 @@ def main_menu() -> None:
             raw = Prompt.ask("Row numbers to toggle (space-separated)")
             numbers = _parse_numbers(raw, theme)
             if numbers:
-                _toggle_multiple(manager, items, numbers, theme)
+                toggled = 0
+                for num in numbers:
+                    if 1 <= num <= len(items):
+                        updated = manager.toggle(items[num - 1].id)
+                        if updated:
+                            toggled += 1
+                if toggled:
+                    console.print(
+                        f"[{theme['success']}]Toggled {toggled} task(s).[/{theme['success']}]"
+                    )
+                else:
+                    console.print(
+                        f"[{theme['error']}]No valid rows selected.[/{theme['error']}]"
+                    )
             Prompt.ask("Press Enter", default="")
 
-        elif choice == "3":
-            # Remove (multiple allowed)
+        elif cmd == "r":
+            # Remove
             items = manager.list_all(tag=current_tag, include_done=True)
             if not items:
                 Prompt.ask("No tasks to remove. Press Enter", default="")
@@ -173,30 +149,29 @@ def main_menu() -> None:
             raw = Prompt.ask("Row numbers to remove (space-separated)")
             numbers = _parse_numbers(raw, theme)
             if numbers:
-                _remove_multiple(manager, items, numbers, theme)
+                ids_to_remove = []
+                for num in numbers:
+                    if 1 <= num <= len(items):
+                        ids_to_remove.append(items[num - 1].id)
+                for task_id in ids_to_remove:
+                    manager.remove(task_id)
+                console.print(
+                    f"[{theme['success']}]Removed {len(ids_to_remove)} task(s).[/{theme['success']}]"
+                )
             Prompt.ask("Press Enter", default="")
 
-        elif choice == "4":
-            # Filter by tag
+        elif cmd == "f":
             tag = Prompt.ask("Tag to filter")
             current_tag = tag.strip() if tag.strip() else None
 
-        elif choice == "5":
+        elif cmd == "s":
             current_tag = None  # reset filter
 
-        elif choice == "6":
-            fmt = Prompt.ask("Format (json/csv/txt)", choices=["json", "csv", "txt"])
-            desktop = Path.home() / "Desktop"
-            try:
-                path = manager.export_data(desktop, fmt)
-                console.print(
-                    f"[{theme['success']}]Exported to {path}[/{theme['success']}]"
-                )
-            except Exception as e:
-                console.print(
-                    f"[{theme['error']}]Export failed: {e}[/{theme['error']}]"
-                )
-            Prompt.ask("Press Enter", default="")
-
-        elif choice == "0":
+        elif cmd == "q":
             break
+
+        else:
+            console.print(
+                f"[{theme['error']}]Unknown command. Use A, T, R, F, S, Q.[/{theme['error']}]"
+            )
+            Prompt.ask("Press Enter", default="")

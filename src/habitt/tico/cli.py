@@ -92,7 +92,7 @@ def remove(identifier: str) -> None:
     manager = TodoManager()
     task_id = _resolve_task_id(manager, identifier)
     if manager.remove(task_id):
-        click.echo(f"Task removed.")
+        click.echo("Task removed.")
     else:
         click.echo("Task not found.")
 

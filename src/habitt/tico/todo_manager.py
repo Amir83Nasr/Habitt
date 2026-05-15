@@ -1,11 +1,10 @@
 """Core logic for todo operations."""
 
-import uuid
 import csv
-from typing import List, Optional
+import uuid
 from pathlib import Path
+from typing import List, Optional
 
-from habitt.core import config
 from habitt.core.storage import load_json, save_json
 from habitt.tico.models import TodoItem
 

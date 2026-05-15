@@ -2,7 +2,6 @@
 
 import json
 from pathlib import Path
-from typing import Optional
 
 APP_NAME = "habitt"
 DEFAULT_DATA_DIR = Path.home() / f".{APP_NAME}"
@@ -16,7 +15,7 @@ def _load_config() -> dict:
     """Load config.json as dict, or return empty dict."""
     if CONFIG_FILE.exists():
         try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            with open(CONFIG_FILE, encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError):
             pass

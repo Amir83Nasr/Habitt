@@ -7,7 +7,6 @@ Rich style syntax: "bold bright_blue on purple4", "italic #ff00ff", etc.
 """
 
 import json
-from pathlib import Path
 from typing import Dict
 
 from habitt.core.config import CONFIG_FILE
@@ -191,7 +190,7 @@ def get_active_theme() -> Dict[str, str]:
     theme_name = DEFAULT_THEME
     try:
         if CONFIG_FILE.exists():
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            with open(CONFIG_FILE, encoding="utf-8") as f:
                 config = json.load(f)
             name = config.get("theme")
             if name in PRESETS:

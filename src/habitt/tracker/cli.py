@@ -5,15 +5,19 @@ from dataclasses import asdict, dataclass
 from typing import Optional
 
 import click
+from rich.console import Console
 
-from habitt.core.config import TIMER_STATE_FILE
+from habitt.core.config import get_timer_state_file
 from habitt.core.jalali_helper import (
     now_shamsi_str,
     now_tehran,
     parse_shamsi_datetime,
+    today_shamsi_str,
 )
 from habitt.tracker.tracker_manager import TrackerManager
-from habitt.tracker.tui import show_log, show_stats
+from habitt.tracker.tui import _build_log_table, _build_stats_table
+
+console = Console()
 
 
 @dataclass
@@ -25,14 +29,11 @@ class TimerState:
     total_paused_seconds: float = 0.0
 
 
-from habitt.core.config import get_timer_state_file
-
-
 def _load_timer_state() -> Optional[TimerState]:
     filepath = get_timer_state_file()
     if not filepath.exists():
         return None
-    with open(filepath, "r", encoding="utf-8") as f:
+    with open(filepath, encoding="utf-8") as f:
         data = json.load(f)
     return TimerState(**data)
 
@@ -98,7 +99,6 @@ def resume() -> None:
     if not state.paused:
         click.echo("Timer is not paused.")
         return
-    # Add paused duration
     pause_dt = parse_shamsi_datetime(state.pause_start)
     now_dt = now_tehran()
     paused_seconds = (now_dt - pause_dt).total_seconds()
@@ -116,7 +116,6 @@ def stop() -> None:
     if not state:
         click.echo("No timer is running.")
         return
-    # Finalize pause if necessary
     if state.paused and state.pause_start:
         pause_dt = parse_shamsi_datetime(state.pause_start)
         now_dt = now_tehran()
@@ -133,14 +132,16 @@ def stop() -> None:
 def log() -> None:
     """Show today's activities."""
     manager = TrackerManager()
-    show_log(manager)
+    table = _build_log_table(manager, date_filter=today_shamsi_str())
+    console.print(table)
 
 
 @main.command()
 def stats() -> None:
     """Show statistics for the last 7 days."""
     manager = TrackerManager()
-    show_stats(manager)
+    table = _build_stats_table(manager)
+    console.print(table)
 
 
 @main.command()

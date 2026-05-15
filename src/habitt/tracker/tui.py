@@ -1,33 +1,34 @@
-"""Interactive terminal UI for tracker using Rich, including live timer."""
+"""Interactive terminal UI for tracker using Rich – clean redesign."""
 
+import select
 import sys
 import time
-import select
 from datetime import timedelta
-from typing import Optional
 from pathlib import Path
+from typing import List, Optional
 
 from rich.console import Console
-from rich.panel import Panel
-from rich.prompt import Prompt, IntPrompt
-from rich.table import Table
-from rich.live import Live
 from rich.layout import Layout
+from rich.live import Live
+from rich.panel import Panel
+from rich.prompt import Prompt
+from rich.table import Table
+from rich.text import Text
 
-from habitt.core.themes import get_active_theme
 from habitt.core.jalali_helper import (
-    now_tehran,
-    now_shamsi_str,
     format_shamsi_datetime,
+    now_tehran,
     shamsi_diff_seconds,
+    today_shamsi_str,
 )
+from habitt.core.themes import get_active_theme
+from habitt.core.validators import prompt_shamsi_date, prompt_time
 from habitt.tracker.tracker_manager import TrackerManager
 
 console = Console()
 
 
 def _get_key_nonblocking() -> Optional[str]:
-    """Return a single character if a key was pressed, else None. Cross-platform."""
     if sys.platform == "win32":
         import msvcrt
 
@@ -40,9 +41,17 @@ def _get_key_nonblocking() -> Optional[str]:
         return None
 
 
-class TimerSession:
-    """Handles the live timer with pause, resume, stop."""
+def _zero_pad_time(text: str) -> str:
+    """Convert '7:9' -> '07:09', '12:5' -> '12:05', etc."""
+    if ":" not in text:
+        raise ValueError("Time must contain ':'")
+    h, m = text.split(":", 1)
+    h = h.zfill(2)
+    m = m.zfill(2)
+    return f"{h}:{m}"
 
+
+class TimerSession:
     def __init__(self, title: str) -> None:
         self.title = title
         self.start_time = now_tehran()
@@ -67,7 +76,6 @@ class TimerSession:
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
     def run(self) -> Optional["Activity"]:
-        """Start the live timer TUI. Returns Activity if stopped normally, else None."""
         theme = get_active_theme()
         if sys.platform != "win32":
             import termios
@@ -150,66 +158,73 @@ class TimerSession:
         return layout
 
 
-def show_log(manager: TrackerManager) -> None:
-    """Display today's activity log as a table with row numbers."""
+def _parse_numbers(raw: str, theme: dict) -> List[int]:
+    try:
+        return [int(x) for x in raw.split()]
+    except ValueError:
+        console.print(
+            f"[{theme['error']}]Invalid input. Use numbers separated by spaces.[/{theme['error']}]"
+        )
+        return []
+
+
+def _build_log_table(
+    manager: TrackerManager, date_filter: Optional[str] = None
+) -> Table:
+    """Build a table of activities filtered by date (all if None)."""
     theme = get_active_theme()
-    console.clear()
-    activities = manager.list_today()
+    if date_filter:
+        activities = [a for a in manager.activities if a.date == date_filter]
+        title = f"Activities on {date_filter}"
+    else:
+        activities = manager.list_all()
+        title = "All Activities"
+
     table = Table(
-        title="Today's Activities",
+        title=title,
         border_style=theme["panel_border"],
+        show_lines=False,
+        padding=(0, 1),
+        expand=True,
     )
-    table.add_column("#", style=theme["dim"], width=4, justify="right")
-    table.add_column("Title", style="bold")
+    table.add_column("#", style=theme["dim"], width=4, justify="center")
+    table.add_column("Title", style="bold", ratio=2)
+    table.add_column("Date", style=theme["info"])
     table.add_column("Start", style=theme["info"])
     table.add_column("End", style=theme["info"])
     table.add_column("Duration", style=theme["accent"])
 
     if not activities:
-        table.add_row("", "No activities logged today.", "", "", "")
-    else:
-        for i, a in enumerate(activities, start=1):
-            seconds = shamsi_diff_seconds(a.start_time, a.end_time)
-            hours, remainder = divmod(int(seconds), 3600)
-            minutes, _ = divmod(remainder, 60)
-            duration_str = f"{hours}h {minutes}m"
-            table.add_row(
-                str(i),
-                a.title,
-                a.start_time.split()[1],
-                a.end_time.split()[1],
-                duration_str,
-            )
+        table.add_row("", "No activities found.", "", "", "", "")
+        return table
 
-    console.print(table)
+    for i, a in enumerate(activities, start=1):
+        seconds = shamsi_diff_seconds(a.start_time, a.end_time)
+        hours, remainder = divmod(int(seconds), 3600)
+        minutes, _ = divmod(remainder, 60)
+        duration_str = f"{hours}h {minutes}m"
+        table.add_row(
+            str(i),
+            a.title,
+            a.date,
+            a.start_time.split()[1],
+            a.end_time.split()[1],
+            duration_str,
+        )
+    return table
 
 
-def add_manual_form(manager: TrackerManager) -> None:
-    """Interactive form to manually add an activity."""
+def _build_stats_table(manager: TrackerManager) -> Table:
     theme = get_active_theme()
-    console.clear()
-    console.print(Panel.fit("Add Activity Manually", style=theme["panel_border"]))
-    title = Prompt.ask("Title")
-    start = Prompt.ask("Start time (YYYY/MM/DD HH:MM)")
-    end = Prompt.ask("End time (YYYY/MM/DD HH:MM)")
-    try:
-        manager.add_activity(title, start, end)
-        console.print(f"[{theme['success']}]Activity added.[/{theme['success']}]")
-    except ValueError as e:
-        console.print(f"[{theme['error']}]Invalid time format: {e}[/{theme['error']}]")
-    Prompt.ask("\nPress Enter to continue", default="")
-
-
-def show_stats(manager: TrackerManager) -> None:
-    """Display daily statistics and a simple bar chart."""
-    theme = get_active_theme()
-    console.clear()
     stats = manager.last_days_stats(7)
     max_minutes = max((m for _, m in stats), default=1)
 
     table = Table(
         title="Daily Summary (last 7 days)",
         border_style=theme["panel_border"],
+        show_lines=False,
+        padding=(0, 1),
+        expand=True,
     )
     table.add_column("Date", style=theme["info"])
     table.add_column("Total", style="bold")
@@ -223,40 +238,77 @@ def show_stats(manager: TrackerManager) -> None:
         bar_length = int((minutes / max_minutes) * bar_width) if max_minutes > 0 else 0
         bar = "█" * bar_length
         table.add_row(date_str, total_str, bar)
-
-    console.print(table)
+    return table
 
 
 def main_menu() -> None:
-    """Entry point for tracker TUI."""
+    """Entry point for tracker TUI with single-letter commands."""
     manager = TrackerManager()
 
     while True:
         theme = get_active_theme()
         console.clear()
+
+        # Header with rule
+        console.rule("T R A C K E R", style=theme["info"])
+        console.print()
+
+        # Today's log (default view)
+        today_table = _build_log_table(manager, date_filter=today_shamsi_str())
+        console.print(today_table)
+        console.print()
+
+        # Menu
         console.print(
-            Panel.fit("TRACKER - Daily Activity Logger", style=theme["app_title"])
+            f"[{theme['info']}]L[/]og  "
+            f"[{theme['info']}]A[/]dd  "
+            f"[{theme['info']}]T[/]imer  "
+            f"[{theme['info']}]R[/]emove  "
+            f"[{theme['info']}]S[/]tats  "
+            f"[{theme['info']}]E[/]xport  "
+            f"[{theme['dim']}]Q[/]uit"
         )
         console.print()
-        console.print(
-            f"[{theme['info']}]1[/] Show log   "
-            f"[{theme['info']}]2[/] Add manual   "
-            f"[{theme['info']}]3[/] Live timer   "
-            f"[{theme['info']}]4[/] Statistics   "
-            f"[{theme['info']}]5[/] Export   "
-            f"[{theme['dim']}]0[/] Back"
-        )
-        choice = Prompt.ask("Your choice", choices=["1", "2", "3", "4", "5", "0"])
 
-        choice = Prompt.ask("Your choice", choices=["1", "2", "3", "4", "0"])
+        prompt = Text("Action", style=theme["info"])
+        prompt.append(" > ", style="white")
+        cmd = Prompt.ask(prompt).strip().lower()
 
-        if choice == "1":
-            show_log(manager)
-            Prompt.ask("\nPress Enter to continue", default="")
-        elif choice == "2":
-            add_manual_form(manager)
-        elif choice == "3":
-            console.clear()
+        if cmd == "l":
+            # Log: view specific date or all
+            date_input = Prompt.ask("Date (YYYY/MM/DD) or empty for all", default="")
+            if date_input.strip():
+                log_table = _build_log_table(manager, date_filter=date_input.strip())
+            else:
+                log_table = _build_log_table(manager)
+            console.print(log_table)
+            Prompt.ask("Press Enter to return", default="")
+
+        elif cmd == "a":
+            title = Prompt.ask("Title")
+            # Date with default today
+            date_str = prompt_shamsi_date(
+                "Date (YYYY/MM/DD) [default today]", default_today=True
+            )
+            # Start time (required)
+            start_hm = prompt_time("Start time (HH:MM)")
+            # End time default now
+            default_end_hm = now_tehran().strftime("%H:%M")
+            end_hm = prompt_time(
+                "End time (HH:MM) [default: {default_end_hm}]", default=default_end_hm
+            )
+            start_full = f"{date_str} {start_hm}:00"
+            end_full = f"{date_str} {end_hm}:00"
+            try:
+                manager.add_activity(title, start_full, end_full)
+                console.print(
+                    f"[{theme['success']}]Activity added.[/{theme['success']}]"
+                )
+            except ValueError as e:
+                console.print(f"[{theme['error']}]Error: {e}[/{theme['error']}]")
+            Prompt.ask("Press Enter", default="")
+
+        elif cmd == "t":
             title = Prompt.ask("Activity title for timer")
             session = TimerSession(title)
             activity = session.run()
@@ -271,17 +323,63 @@ def main_menu() -> None:
                 )
             else:
                 console.print(f"[{theme['dim']}]Timer cancelled.[/{theme['dim']}]")
-            Prompt.ask("\nPress Enter to continue", default="")
+            Prompt.ask("Press Enter", default="")
 
-        elif choice == "4":
-            show_stats(manager)
-            Prompt.ask("\nPress Enter to continue", default="")
+        elif cmd == "r":
+            today_items = manager.list_today()
+            if not today_items:
+                Prompt.ask("No activities to remove today. Press Enter", default="")
+                continue
+            raw = Prompt.ask("Row numbers to remove (space-separated)")
+            numbers = _parse_numbers(raw, theme)
+            if numbers:
+                ids_to_remove = []
+                for num in numbers:
+                    if 1 <= num <= len(today_items):
+                        ids_to_remove.append(today_items[num - 1].id)
+                for aid in ids_to_remove:
+                    manager.remove_activity(aid)
+                console.print(
+                    f"[{theme['success']}]Removed {len(ids_to_remove)} activity(s).[/{theme['success']}]"
+                )
+            Prompt.ask("Press Enter", default="")
 
-        elif choice == "5":
-            fmt = Prompt.ask("Format (json/csv/txt)", choices=["json", "csv", "txt"])
+        elif cmd == "s":
+            console.clear()
+            console.rule("Statistics", style=theme["info"])
+            console.print()
+            stats_table = _build_stats_table(manager)
+            console.print(stats_table)
+            Prompt.ask("Press Enter to return", default="")
+
+        elif cmd == "e":
+            # Export submenu with default dates
+            today = today_shamsi_str()
+            export_choice = Prompt.ask(
+                "Export: (1) All, (2) Specific date, (3) Date range",
+                choices=["1", "2", "3"],
+                default="1",
+            )
+            fmt = Prompt.ask(
+                "Format (json/csv/txt)", choices=["json", "csv", "txt"], default="txt"
+            )
             desktop = Path.home() / "Desktop"
             try:
-                path = manager.export_data(desktop, fmt)
+                if export_choice == "1":
+                    path = manager.export_data(desktop, fmt)
+                elif export_choice == "2":
+                    date = Prompt.ask(
+                        f"Date (YYYY/MM/DD) [default: {today}]", default=today
+                    )
+                    path = manager.export_date_data(desktop, date, fmt)
+                else:  # range
+                    start = Prompt.ask(
+                        f"Start date (YYYY/MM/DD) [default: {today}]", default=today
+                    )
+                    end = Prompt.ask(
+                        f"End date (YYYY/MM/DD) [default: {today}]", default=today
+                    )
+                    path = manager.export_date_range(desktop, start, end, fmt)
                 console.print(
                     f"[{theme['success']}]Exported to {path}[/{theme['success']}]"
                 )
@@ -289,7 +387,13 @@ def main_menu() -> None:
                 console.print(
                     f"[{theme['error']}]Export failed: {e}[/{theme['error']}]"
                 )
-            Prompt.ask("\nPress Enter to continue", default="")
+            Prompt.ask("Press Enter", default="")
 
-        elif choice == "0":
+        elif cmd == "q":
             break
+
+        else:
+            console.print(
+                f"[{theme['error']}]Unknown command. Use L, A, T, R, S, E, Q.[/{theme['error']}]"
+            )
+            Prompt.ask("Press Enter", default="")
