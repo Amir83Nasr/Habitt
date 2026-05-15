@@ -1,28 +1,59 @@
-"""Interactive terminal UI for tracker using Rich – with Pomodoro timer."""
+"""Interactive terminal UI for tracker using Rich – with configurable Pomodoro."""
 
-import select
 import sys
 import time
+import select
+import json
 from datetime import timedelta
+from typing import Optional, List
 from pathlib import Path
-from typing import List, Optional
 
 from rich.console import Console
-from rich.layout import Layout
-from rich.live import Live
 from rich.panel import Panel
-from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 from rich.prompt import Prompt
 from rich.table import Table
+from rich.live import Live
+from rich.layout import Layout
 from rich.text import Text
+from rich.progress import Progress, BarColumn, TextColumn, TaskProgressColumn
 
-from habitt.core.jalali_helper import (format_shamsi_datetime, now_shamsi_str,
-                                       now_tehran, shamsi_diff_seconds,
-                                       today_shamsi_str)
 from habitt.core.themes import get_active_theme
+from habitt.core.jalali_helper import (
+    now_tehran,
+    now_shamsi_str,
+    format_shamsi_datetime,
+    shamsi_diff_seconds,
+    today_shamsi_str,
+)
 from habitt.tracker.tracker_manager import TrackerManager
+from habitt.core.menu_utils import select_from_options
+from habitt.core.config import get_data_dir
+from habitt.core.validators import prompt_time
 
 console = Console()
+
+POMODORO_CONFIG_FILE = get_data_dir() / "pomodoro_config.json"
+
+
+def load_pomodoro_config() -> dict:
+    default = {"work": 25, "short_break": 5, "long_break": 15, "cycles": 4}
+    if POMODORO_CONFIG_FILE.exists():
+        try:
+            with open(POMODORO_CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for key in default:
+                if key not in data:
+                    data[key] = default[key]
+            return data
+        except (json.JSONDecodeError, OSError):
+            pass
+    return default
+
+
+def save_pomodoro_config(config: dict) -> None:
+    POMODORO_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(POMODORO_CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
 
 
 def _get_key_nonblocking() -> Optional[str]:
@@ -146,39 +177,32 @@ class TimerSession:
 
 
 class PomodoroSession:
-    """Handles a full pomodoro cycle: 25min work, 5min break, long break after 4."""
-
-    WORK_MIN = 25
-    SHORT_BREAK_MIN = 5
-    LONG_BREAK_MIN = 15
-    CYCLES_BEFORE_LONG = 4
-
-    def __init__(self) -> None:
+    def __init__(self, config: dict) -> None:
+        self.work_min = config["work"]
+        self.short_break_min = config["short_break"]
+        self.long_break_min = config["long_break"]
+        self.cycles_before_long = config["cycles"]
         self.cycle = 0
-        self.is_work = True
         self.cancelled = False
 
     def run(self, manager: TrackerManager) -> None:
         theme = get_active_theme()
         while not self.cancelled:
             self.cycle += 1
-            # Work session
-            if not self._run_phase("Work", self.WORK_MIN, manager, theme):
+            if not self._run_phase("Work", self.work_min, manager, theme):
                 break
-            # Break
-            if self.cycle % self.CYCLES_BEFORE_LONG == 0:
+            if self.cycle % self.cycles_before_long == 0:
                 if not self._run_phase(
-                    "Long Break", self.LONG_BREAK_MIN, manager, theme
+                    "Long Break", self.long_break_min, manager, theme
                 ):
                     break
             else:
-                if not self._run_phase("Break", self.SHORT_BREAK_MIN, manager, theme):
+                if not self._run_phase("Break", self.short_break_min, manager, theme):
                     break
 
     def _run_phase(
         self, label: str, minutes: int, manager: TrackerManager, theme: dict
     ) -> bool:
-        """Run one phase (work or break). Return False if user quit."""
         total_seconds = minutes * 60
         start_time = now_tehran()
         paused = False
@@ -231,7 +255,6 @@ class PomodoroSession:
 
                 termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
-        # Save activity only for work phases (not breaks)
         if label == "Work":
             end_time = now_tehran()
             title = f"Pomodoro #{self.cycle}"
@@ -239,10 +262,8 @@ class PomodoroSession:
             end_str = format_shamsi_datetime(end_time)
             manager.add_activity(title, start_str, end_str)
 
-        # Bell notification
         sys.stdout.write("\a")
         sys.stdout.flush()
-
         return True
 
 
@@ -329,7 +350,6 @@ def _build_stats_table(manager: TrackerManager) -> Table:
 
 
 def main_menu() -> None:
-    """Entry point for tracker TUI with single-letter commands + Pomodoro."""
     manager = TrackerManager()
 
     while True:
@@ -343,21 +363,19 @@ def main_menu() -> None:
         console.print(today_table)
         console.print()
 
-        console.print(
-            f"[{theme['info']}]L[/]og  "
-            f"[{theme['info']}]A[/]dd  "
-            f"[{theme['info']}]T[/]imer  "
-            f"[{theme['info']}]P[/]omodoro  "
-            f"[{theme['info']}]R[/]emove  "
-            f"[{theme['info']}]S[/]tats  "
-            f"[{theme['info']}]E[/]xport  "
-            f"[{theme['dim']}]Q[/]uit"
-        )
-        console.print()
-
-        prompt = Text("Action", style=theme["info"])
-        prompt.append(" > ", style="white")
-        cmd = Prompt.ask(prompt).strip().lower()
+        options = [
+            ("l", "Log"),
+            ("a", "Add manual"),
+            ("t", "Timer"),
+            ("p", "Pomodoro"),
+            ("r", "Remove"),
+            ("s", "Stats"),
+            ("e", "Export"),
+            ("q", "Back"),
+        ]
+        cmd = select_from_options(options, theme=theme, cancel_key="q")
+        if cmd is None or cmd == "q":
+            break
 
         if cmd == "l":
             date_input = Prompt.ask("Date (YYYY/MM/DD) or empty for all", default="")
@@ -372,12 +390,12 @@ def main_menu() -> None:
             title = Prompt.ask("Title")
             today = today_shamsi_str()
             default_start_hm = now_tehran().strftime("%H:%M")
-            start_hm = Prompt.ask(
+            start_hm = prompt_time(
                 f"Start time (HH:MM) [default: {default_start_hm}]",
                 default=default_start_hm,
             )
             default_end_hm = now_tehran().strftime("%H:%M")
-            end_hm = Prompt.ask(
+            end_hm = prompt_time(
                 f"End time (HH:MM) [default: {default_end_hm}]",
                 default=default_end_hm,
             )
@@ -410,12 +428,44 @@ def main_menu() -> None:
             Prompt.ask("Press Enter", default="")
 
         elif cmd == "p":
-            session = PomodoroSession()
-            session.run(manager)
-            console.print(
-                f"[{theme['success']}]Pomodoro session ended.[/{theme['success']}]"
-            )
-            Prompt.ask("Press Enter", default="")
+            config = load_pomodoro_config()
+            while True:
+                console.clear()
+                console.rule("Pomodoro Settings", style=theme["info"])
+                console.print(f"1. Work duration: {config['work']} min")
+                console.print(f"2. Short break: {config['short_break']} min")
+                console.print(f"3. Long break: {config['long_break']} min")
+                console.print(f"4. Cycles before long break: {config['cycles']}")
+                console.print(f"5. Start")
+                console.print(f"0. Back")
+                choice = Prompt.ask("Choose", choices=["0", "1", "2", "3", "4", "5"])
+                if choice == "0":
+                    break
+                elif choice == "1":
+                    new_val = Prompt.ask("Work minutes", default=str(config["work"]))
+                    if new_val.isdigit() and int(new_val) > 0:
+                        config["work"] = int(new_val)
+                elif choice == "2":
+                    new_val = Prompt.ask(
+                        "Short break minutes", default=str(config["short_break"])
+                    )
+                    if new_val.isdigit() and int(new_val) >= 0:
+                        config["short_break"] = int(new_val)
+                elif choice == "3":
+                    new_val = Prompt.ask(
+                        "Long break minutes", default=str(config["long_break"])
+                    )
+                    if new_val.isdigit() and int(new_val) >= 0:
+                        config["long_break"] = int(new_val)
+                elif choice == "4":
+                    new_val = Prompt.ask("Cycles", default=str(config["cycles"]))
+                    if new_val.isdigit() and int(new_val) > 0:
+                        config["cycles"] = int(new_val)
+                elif choice == "5":
+                    save_pomodoro_config(config)
+                    session = PomodoroSession(config)
+                    session.run(manager)
+                    break
 
         elif cmd == "r":
             today_items = manager.list_today()
@@ -480,11 +530,6 @@ def main_menu() -> None:
                 )
             Prompt.ask("Press Enter", default="")
 
-        elif cmd == "q":
-            break
 
-        else:
-            console.print(
-                f"[{theme['error']}]Unknown command. Use L, A, T, P, R, S, E, Q.[/{theme['error']}]"
-            )
-            Prompt.ask("Press Enter", default="")
+if __name__ == "__main__":
+    main_menu()

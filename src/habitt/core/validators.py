@@ -2,8 +2,7 @@
 
 from rich.console import Console
 from rich.prompt import Prompt
-
-from habitt.core.jalali_helper import is_valid_shamsi_date, today_shamsi_str
+from habitt.core.jalali_helper import today_shamsi_str, is_valid_shamsi_date
 
 console = Console()
 
@@ -31,18 +30,20 @@ def prompt_shamsi_date(prompt_text: str, default_today: bool = False) -> str:
         console.print("[red]Invalid date format. Use YYYY/MM/DD.[/red]")
 
 
-def prompt_time(prompt_text: str, default: str = None) -> str:
-    """Loop until user enters a valid time (HH:MM)."""
+def prompt_time(prompt_text: str, default: str = "") -> str:
+    """
+    Loop until user enters a valid time (HH:MM).
+    Accepts '7:9' -> '07:09', rejects hours>23 or minutes>59.
+    """
     while True:
         user_input = Prompt.ask(prompt_text, default=default if default else "")
         if not user_input.strip():
-            if default is not None:
+            if default:
                 return default
             console.print("[red]Time cannot be empty.[/red]")
             continue
         try:
             padded = _zero_pad_time(user_input.strip())
-            # Validate
             h, m = padded.split(":")
             if 0 <= int(h) <= 23 and 0 <= int(m) <= 59:
                 return padded

@@ -9,6 +9,7 @@ from rich.text import Text
 
 from habitt.core.themes import get_active_theme
 from habitt.tico.todo_manager import TodoItem, TodoManager
+from habitt.core.menu_utils import select_from_options
 
 console = Console()
 
@@ -92,19 +93,17 @@ def main_menu() -> None:
         console.print()
 
         # ---- Command bar ----
-        console.print(
-            f"[{theme['info']}]A[/]dd  "
-            f"[{theme['info']}]T[/]oggle  "
-            f"[{theme['info']}]R[/]emove  "
-            f"[{theme['info']}]F[/]ilter  "
-            f"[{theme['info']}]S[/]how all  "
-            f"[{theme['dim']}]Q[/]uit"
-        )
-        console.print()
-
-        prompt = Text("Action", style=theme["info"])
-        prompt.append(" > ", style="white")
-        cmd = Prompt.ask(prompt).strip().lower()
+        options = [
+            ("a", "Add"),
+            ("t", "Toggle"),
+            ("r", "Remove"),
+            ("f", "Filter"),
+            ("s", "Show all"),
+            ("q", "Back"),
+        ]
+        cmd = select_from_options(options, theme=theme, cancel_key="q")
+        if cmd is None or cmd == "q":
+            break
 
         if cmd == "a":
             # Add

@@ -112,6 +112,21 @@ def export(fmt: str) -> None:
     click.echo(f"Exported to {path}")
 
 
+@main.command()
+@click.option("--force", is_flag=True, help="Skip confirmation")
+def reset(force: bool) -> None:
+    """Delete all tasks."""
+    if not force:
+        confirm = click.confirm("Delete all tasks?")
+        if not confirm:
+            click.echo("Cancelled.")
+            return
+    from habitt.core.config import get_tico_file
+
+    get_tico_file().unlink(missing_ok=True)
+    click.echo("All tasks deleted.")
+
+
 click_completion.init()
 
 if __name__ == "__main__":

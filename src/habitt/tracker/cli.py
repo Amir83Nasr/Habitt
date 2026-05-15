@@ -155,6 +155,22 @@ def export(fmt: str) -> None:
     click.echo(f"Exported to {path}")
 
 
+@main.command()
+@click.option("--force", is_flag=True, help="Skip confirmation")
+def reset(force: bool) -> None:
+    """Delete all activities and timer state."""
+    if not force:
+        confirm = click.confirm("Delete all activities?")
+        if not confirm:
+            click.echo("Cancelled.")
+            return
+    from habitt.core.config import get_tracker_file, get_timer_state_file
+
+    get_tracker_file().unlink(missing_ok=True)
+    get_timer_state_file().unlink(missing_ok=True)
+    click.echo("All activities deleted.")
+
+
 click_completion.init()
 
 if __name__ == "__main__":
