@@ -7,8 +7,7 @@ import select
 import sys
 import time
 from datetime import timedelta
-from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from rich.live import Live
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
@@ -36,7 +35,7 @@ def load_config() -> dict[str, Any]:
             for key, val in DEFAULT_POMODORO_CONFIG.items():
                 if key not in data:
                     data[key] = val
-            return data
+            return cast(dict[str, Any], data)
         except (json.JSONDecodeError, OSError):
             pass
     return dict(DEFAULT_POMODORO_CONFIG)
@@ -182,7 +181,7 @@ class PomodoroPlugin(PluginBase):
                     break
 
     @staticmethod
-    def _get_key_nonblocking():
+    def _get_key_nonblocking() -> str | None:
         if sys.platform == "win32":
             import msvcrt
 

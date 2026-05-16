@@ -1,5 +1,8 @@
 """Tests for TodoManager."""
 
+import pytest
+
+from habitt.core.storage import load_json
 from habitt.tico.todo_manager import TodoManager
 
 
@@ -62,3 +65,36 @@ def test_get_by_id(temp_data_dir):
     found = manager.get_by_id(item.id)
     assert found.title == "Find me"
     assert manager.get_by_id("nope") is None
+
+
+def test_export_json(temp_data_dir):
+    manager = TodoManager()
+    manager.add("Task 1")
+    path = manager.export_data(temp_data_dir, "json")
+    assert path.exists()
+    data = load_json(path)
+    assert len(data) == 1
+
+
+def test_export_csv(temp_data_dir):
+    manager = TodoManager()
+    manager.add("Task 1", tag="work")
+    path = manager.export_data(temp_data_dir, "csv")
+    assert path.exists()
+    content = path.read_text()
+    assert "Task 1" in content
+
+
+def test_export_txt(temp_data_dir):
+    manager = TodoManager()
+    manager.add("Task 1")
+    path = manager.export_data(temp_data_dir, "txt")
+    assert path.exists()
+    content = path.read_text()
+    assert "[x]" in content or "[ ]" in content
+
+
+def test_export_invalid_format(temp_data_dir):
+    manager = TodoManager()
+    with pytest.raises(ValueError):
+        manager.export_data(temp_data_dir, "xml")

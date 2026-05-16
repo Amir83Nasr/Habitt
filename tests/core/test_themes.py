@@ -43,7 +43,7 @@ def test_save_invalid_theme_raises():
     except ValueError:
         pass
     else:
-        assert False, "Should raise ValueError"
+        raise AssertionError("Should raise ValueError")
 
 
 def test_validate_theme_valid():

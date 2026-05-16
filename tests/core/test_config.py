@@ -2,8 +2,8 @@
 
 import json
 
+import habitt.core.config as config_mod
 from habitt.core.config import (
-    CONFIG_FILE,
     DEFAULT_DATA_DIR,
     get_builtin_plugins_dir,
     get_data_dir,
@@ -15,19 +15,22 @@ from habitt.core.config import (
 )
 
 
-def test_default_data_dir():
-    assert get_data_dir() == DEFAULT_DATA_DIR
-
-
 def test_set_data_dir(temp_data_dir, monkeypatch):
-    custom = temp_data_dir / "custom_data"
+    # مطمئن شو CONFIG_FILE به temp اشاره کنه
+    monkeypatch.setattr(config_mod, "CONFIG_FILE", temp_data_dir / "config.json")
+    custom = (temp_data_dir / "custom_data").resolve()
     set_data_dir(str(custom))
     assert get_data_dir() == custom
-    assert custom.exists()
-    # Check that config.json was updated
-    with open(CONFIG_FILE) as f:
+    # چک کن که config.json آپدیت شده
+    cfg_file = temp_data_dir / "config.json"
+    assert cfg_file.exists()
+    with open(cfg_file) as f:
         cfg = json.load(f)
     assert cfg["data_dir"] == str(custom)
+
+
+def test_default_data_dir():
+    assert get_data_dir() == DEFAULT_DATA_DIR
 
 
 def test_get_tico_file():

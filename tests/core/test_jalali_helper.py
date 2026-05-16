@@ -1,8 +1,10 @@
 """Tests for Jalali date/time helpers."""
 
 import jdatetime
+import pytest
 
 from habitt.core.jalali_helper import (
+    TEHRAN_TZ,
     format_shamsi_datetime,
     now_shamsi_str,
     now_tehran,
@@ -45,14 +47,20 @@ def test_parse_shamsi_datetime():
     assert dt.tzinfo is not None
 
 
+def test_parse_shamsi_datetime_invalid():
+    with pytest.raises(ValueError):
+        parse_shamsi_datetime("invalid")
+    with pytest.raises(ValueError):
+        parse_shamsi_datetime("1404/01/01")
+
+
 def test_format_shamsi_datetime():
-    dt = jdatetime.datetime(1404, 8, 23, 14, 30, 45)
-    formatted = format_shamsi_datetime(dt)
-    assert formatted == "1404/08/23 14:30:45"
+
+    dt = jdatetime.datetime(1404, 8, 25, 14, 30, 45, tzinfo=TEHRAN_TZ)
+    result = format_shamsi_datetime(dt)
+    assert result == "1404/08/25 14:30:45"
 
 
 def test_shamsi_diff_seconds():
-    start = "1404/08/23 14:00:00"
-    end = "1404/08/23 14:30:25"
-    diff = shamsi_diff_seconds(start, end)
-    assert diff == (30 * 60) + 25  # 30 minutes 25 seconds
+    diff = shamsi_diff_seconds("1404/08/25 10:00:00", "1404/08/25 10:30:00")
+    assert diff == 1800.0

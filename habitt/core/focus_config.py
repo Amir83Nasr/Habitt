@@ -5,11 +5,9 @@ from __future__ import annotations
 import importlib.resources
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from habitt.core.config import get_data_dir
-
-FOCUS_CONFIG_FILE = get_data_dir() / "focus_config.json"
 
 DEFAULT_FOCUS_CONFIG: dict[str, Any] = {
     "duration": 25,
@@ -18,23 +16,27 @@ DEFAULT_FOCUS_CONFIG: dict[str, Any] = {
 }
 
 
+def _focus_config_file() -> Path:
+    return get_data_dir() / "focus_config.json"
+
+
 def load_focus_config() -> dict[str, Any]:
-    if FOCUS_CONFIG_FILE.exists():
+    if _focus_config_file().exists():
         try:
-            with open(FOCUS_CONFIG_FILE, encoding="utf-8") as f:
+            with open(_focus_config_file(), encoding="utf-8") as f:
                 data = json.load(f)
             for key, val in DEFAULT_FOCUS_CONFIG.items():
                 if key not in data:
                     data[key] = val
-            return data
+            return cast(dict[str, Any], data)
         except (json.JSONDecodeError, OSError):
             pass
     return dict(DEFAULT_FOCUS_CONFIG)
 
 
 def save_focus_config(config: dict[str, Any]) -> None:
-    FOCUS_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(FOCUS_CONFIG_FILE, "w", encoding="utf-8") as f:
+    _focus_config_file().parent.mkdir(parents=True, exist_ok=True)
+    with open(_focus_config_file(), "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
 
 
@@ -55,31 +57,22 @@ def list_user_music() -> list[Path]:
 
 
 def list_builtin_music() -> list[str]:
-    """Return list of built-in music filenames (without extension)."""
     try:
         music_dir = importlib.resources.files("habitt") / "assets" / "music"
         if music_dir.is_dir():
             return sorted(
-                [f.name for f in music_dir.iterdir() if f.suffix in (".mp3", ".wav")]
+                [
+                    f.name
+                    for f in music_dir.iterdir()
+                    if f.name.endswith((".mp3", ".wav"))
+                ]
             )
     except Exception:
         pass
     return []
 
 
-def get_builtin_music_path(name: str) -> str:
-    """Return absolute path to a built-in music file."""
-    try:
-        ref = importlib.resources.files("habitt") / "assets" / "music" / name
-        if ref.is_file():
-            return str(ref)
-    except Exception:
-        pass
-    return ""
-
-
 def resolve_music_path(config: dict[str, Any]) -> str:
-    """Return the resolved music file path based on config."""
     if not config.get("music_enabled", False):
         return ""
     source = config.get("music_source", "none")
@@ -87,9 +80,19 @@ def resolve_music_path(config: dict[str, Any]) -> str:
         return ""
     elif source.startswith("builtin:"):
         name = source.split(":", 1)[1]
-        return get_builtin_music_path(name)
+        return get_builtin_music_path(name)  # خودش str یا "" برمی‌گردونه
     elif source.startswith("custom:"):
         path = source.split(":", 1)[1]
         if Path(path).is_file():
-            return path
+            return cast(str, path)
+    return ""
+
+
+def get_builtin_music_path(name: str) -> str:
+    try:
+        ref = importlib.resources.files("habitt") / "assets" / "music" / name
+        if ref.is_file():
+            return str(ref)
+    except Exception:
+        pass
     return ""

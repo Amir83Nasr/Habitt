@@ -27,7 +27,7 @@ def backup_file(filepath: Path) -> None:
     # Purge old backups
     pattern = f"{filepath.stem}_*{filepath.suffix}"
     backups = sorted(
-        [f for f in backup_dir.glob(pattern)],
+        backup_dir.glob(pattern),
         key=lambda p: p.stat().st_mtime,
     )
     while len(backups) > MAX_BACKUPS:

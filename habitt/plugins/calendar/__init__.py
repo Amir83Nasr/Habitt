@@ -46,6 +46,30 @@ class CalendarPlugin(PluginBase):
     name = "calendar"
     description = "Show Shamsi monthly calendar"
 
+    def _render_day(
+        self,
+        day: int,
+        year: int,
+        month: int,
+        today: jdatetime.date,
+        theme: dict[str, str],
+    ) -> Text:
+        """Return a styled Text for the given day number."""
+        date = jdatetime.date(year, month, day)
+        is_today = date == today
+        is_friday = date.weekday() == 6
+
+        if is_today and is_friday:
+            style = f"bold underline {theme['error']}"
+        elif is_today:
+            style = f"bold underline {theme['info']}"
+        elif is_friday:
+            style = theme["error"]
+        else:
+            style = ""
+
+        return Text(str(day), style=style)
+
     def run_tui(self) -> None:
         """Main loop: display month and handle navigation."""
         theme = get_active_theme()
@@ -81,7 +105,7 @@ class CalendarPlugin(PluginBase):
                 break
 
     def _build_month_table(
-        self, year: int, month: int, theme: dict, today: jdatetime.date
+        self, year: int, month: int, theme: dict[str, str], today: jdatetime.date
     ) -> Table:
         """Create a Rich table for the given Shamsi month."""
         title = f"{MONTH_NAMES[month]} {year}"
@@ -125,22 +149,3 @@ class CalendarPlugin(PluginBase):
             table.add_row(*week)
 
         return table
-
-    def _render_day(
-        self, day: int, year: int, month: int, today: jdatetime.date, theme: dict
-    ) -> Text:
-        """Return a styled Text for the given day number."""
-        date = jdatetime.date(year, month, day)
-        is_today = date == today
-        is_friday = date.weekday() == 6
-
-        if is_today and is_friday:
-            style = f"bold underline {theme['error']}"
-        elif is_today:
-            style = f"bold underline {theme['info']}"
-        elif is_friday:
-            style = theme["error"]
-        else:
-            style = ""
-
-        return Text(str(day), style=style)

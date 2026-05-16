@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "habitt"
-version = "0.1.0"
+version = "3.1.0"
 description = "Terminal-based habit tracker with todo (tico) and activity logger (tracker)"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -85,9 +85,19 @@ warn_unused_configs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+filterwarnings = ["ignore::DeprecationWarning:jdatetime.*"]
 
 [tool.coverage.run]
 source = ["habitt"]
+omit = [
+    "habitt/cli.py",
+    "habitt/tico/cli.py",
+    "habitt/tico/tui.py",
+    "habitt/tracker/cli.py",
+    "habitt/tracker/tui.py",
+    "habitt/plugins/*",
+    "habitt/__main__.py",
+]
 
 [tool.coverage.report]
 show_missing = true

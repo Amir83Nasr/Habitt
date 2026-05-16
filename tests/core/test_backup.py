@@ -1,17 +1,17 @@
 """Tests for automatic backup."""
 
-
 from habitt.core.backup import MAX_BACKUPS, backup_file
 
 
 def test_backup_creates_file(temp_data_dir):
     file = temp_data_dir / "test.json"
     file.write_text("data")
+    from habitt.core.backup import backup_file
+
     backup_file(file)
     backup_dir = temp_data_dir / "backups"
-    assert backup_dir.exists()
     backups = list(backup_dir.glob("test_*.json"))
-    assert len(backups) == 1
+    assert len(backups) == 1, f"Expected 1 backup, got {len(backups)}"
 
 
 def test_backup_limit(temp_data_dir):

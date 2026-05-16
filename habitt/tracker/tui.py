@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import select
 import signal
 import subprocess
@@ -10,7 +9,7 @@ import sys
 import time
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import cast
 
 from rich.console import Console
 from rich.layout import Layout
@@ -21,7 +20,6 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
 
-from habitt.core.config import get_data_dir
 from habitt.core.focus_config import (
     load_focus_config,
     resolve_music_path,
@@ -36,57 +34,16 @@ from habitt.core.jalali_helper import (
 from habitt.core.menu_utils import select_from_options
 from habitt.core.themes import get_active_theme
 from habitt.core.validators import prompt_time
+from habitt.tracker.models import Activity
 from habitt.tracker.tracker_manager import TrackerManager
 
 console = Console()
 
-FOCUS_CONFIG_FILE = get_data_dir() / "focus_config.json"
-DEFAULT_FOCUS_CONFIG = {
-    "duration": 25,
-    "music_enabled": False,
-}
-DEFAULT_MUSIC_PATH = get_data_dir() / "focus_music" / "lo-fi.mp3"
-
-MUSIC_OPTIONS = {
-    "none": "No music",
-    "lo-fi": "Lo-Fi Hip Hop",
-    "nature": "Nature Sounds",
-}
+# پاک‌سازی: توابع load/save focus_config حذف شدن چون از ماژول اصلی می‌آیند.
+# ثابت FOCUS_CONFIG_FILE و ... لازم نیست.
 
 
-def get_music_path(music_key: str) -> str:
-    """Return the absolute path to the music file, or empty string if none."""
-    if music_key == "none":
-        return ""
-
-    return str(
-        importlib.resources.files("habitt") / "assets" / "music" / f"{music_key}.mp3"
-    )
-
-
-def load_focus_config() -> dict[str, Any]:
-    """Load focus configuration from JSON, falling back to defaults."""
-    if FOCUS_CONFIG_FILE.exists():
-        try:
-            with open(FOCUS_CONFIG_FILE, encoding="utf-8") as f:
-                data = json.load(f)
-            for key, val in DEFAULT_FOCUS_CONFIG.items():
-                if key not in data:
-                    data[key] = val
-            return data
-        except (json.JSONDecodeError, OSError):
-            pass
-    return dict(DEFAULT_FOCUS_CONFIG)
-
-
-def save_focus_config(config: dict[str, Any]) -> None:
-    """Save focus configuration to JSON."""
-    FOCUS_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(FOCUS_CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2)
-
-
-def _get_key_nonblocking() -> Optional[str]:
+def _get_key_nonblocking() -> str | None:
     if sys.platform == "win32":
         import msvcrt
 
@@ -114,10 +71,13 @@ class TimerSession:
 
     def elapsed(self) -> timedelta:
         if self.stopped and self.end_time:
-            return self.end_time - self.start_time - self.total_paused
+            diff = self.end_time - self.start_time - self.total_paused
+            return cast(timedelta, diff)
         if self.paused and self.pause_start:
-            return self.pause_start - self.start_time - self.total_paused
-        return now_tehran() - self.start_time - self.total_paused
+            diff = self.pause_start - self.start_time - self.total_paused
+            return cast(timedelta, diff)
+        diff = now_tehran() - self.start_time - self.total_paused
+        return cast(timedelta, diff)
 
     def _format_elapsed(self) -> str:
         seconds = int(self.elapsed().total_seconds())
@@ -125,7 +85,7 @@ class TimerSession:
         minutes, seconds = divmod(remainder, 60)
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
-    def run(self) -> Optional[Activity]:
+    def run(self) -> Activity | None:
         theme = get_active_theme()
         if sys.platform != "win32":
             import termios
@@ -174,8 +134,6 @@ class TimerSession:
         if self.cancelled:
             return None
 
-        from habitt.tracker.models import Activity
-
         start_str = format_shamsi_datetime(self.start_time)
         end_str = format_shamsi_datetime(self.end_time)
         return Activity(title=self.title, start_time=start_str, end_time=end_str)
@@ -187,10 +145,7 @@ class TimerSession:
             Layout(name="timer", size=5),
             Layout(name="controls", size=5),
         )
-        header = Panel(
-            f"Timer: {self.title}",
-            style=theme["app_title"],
-        )
+        header = Panel(f"Timer: {self.title}", style=theme["app_title"])
         status = "PAUSED" if self.paused else "RUNNING"
         timer_text = (
             f"[{theme['clock']}]Elapsed: {self._format_elapsed()}   "
@@ -209,6 +164,8 @@ class TimerSession:
 
 
 class FocusSession:
+    """Deep focus timer with full-screen UI and optional music."""
+
     def __init__(self, title: str, duration_minutes: int, music_path: str = "") -> None:
         self.title = title
         self.duration_seconds = duration_minutes * 60
@@ -220,74 +177,7 @@ class FocusSession:
         self.stopped = False
         self.end_time = None
         self.cancelled = False
-        self.music_process: Optional[subprocess.Popen] = None
-
-    def _render_layout(self, theme: dict[str, str]) -> Layout:
-        remaining = self.remaining_seconds()
-        progress_pct = (
-            1.0 - (remaining / self.duration_seconds)
-            if self.duration_seconds > 0
-            else 1.0
-        )
-        timer_str = self._format_time(remaining)
-
-        layout = Layout()
-        layout.split(
-            Layout(name="header", size=5),
-            Layout(name="timer", size=11),
-            Layout(name="progress", size=5),
-            Layout(name="controls", size=3),
-        )
-
-        # Title
-        title_text = Text(self.title, style=f"bold {theme['info']}", justify="center")
-        layout["header"].update(Panel(title_text, border_style=theme["panel_border"]))
-
-        # Big timer
-        timer_renderable = Text(
-            timer_str, style=f"bold {theme['clock']}", justify="center"
-        )
-        layout["timer"].update(
-            Panel(timer_renderable, border_style=theme["panel_border"], padding=(2, 4))
-        )
-
-        # Progress bar
-        prog = Progress(
-            BarColumn(bar_width=50, style=theme["accent"]),
-            TextColumn(f"  {int(progress_pct * 100)}%", style=theme["dim"]),
-        )
-        task = prog.add_task("", total=100)
-        prog.update(task, completed=progress_pct * 100)
-        layout["progress"].update(Panel(prog, border_style=theme["panel_border"]))
-
-        # Controls
-        status = "PAUSED" if self.paused else "RUNNING"
-        controls = (
-            f"[{theme['info']}]p[/] Pause  "
-            f"[{theme['info']}]r[/] Resume  "
-            f"[{theme['info']}]s[/] Stop & Save  "
-            f"[{theme['dim']}]q[/] Quit  "
-            f"  [{theme['accent']}]{status}[/{theme['accent']}]"
-        )
-        layout["controls"].update(Panel(controls, border_style=theme["dim"]))
-
-        return layout
-
-    def remaining_seconds(self) -> float:
-        return max(0.0, self.duration_seconds - self.elapsed().total_seconds())
-
-    def elapsed(self) -> timedelta:
-        if self.stopped and self.end_time:
-            return self.end_time - self.start_time - self.total_paused
-        if self.paused and self.pause_start:
-            return self.pause_start - self.start_time - self.total_paused
-        return now_tehran() - self.start_time - self.total_paused
-
-    def _format_time(self, seconds: float) -> str:
-        secs = max(0, int(seconds))
-        hours, remainder = divmod(secs, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        self.music_process: subprocess.Popen[bytes] | None = None
 
     def _play_music(self) -> None:
         if not self.music_path or not Path(self.music_path).exists():
@@ -335,7 +225,7 @@ class FocusSession:
                 self.music_process.terminate()
             else:
                 try:
-                    self.music_process.send_signal(signal.SIGCONT)  # if paused
+                    self.music_process.send_signal(signal.SIGCONT)
                 except Exception:
                     pass
                 self.music_process.terminate()
@@ -345,8 +235,73 @@ class FocusSession:
                 self.music_process.kill()
         self.music_process = None
 
-    # متد run مثل قبله، فقط در ابتدا _play_music() و داخل کلیدها _pause/_resume صدا زده بشه.
-    def run(self) -> Optional[Activity]:
+    def elapsed(self) -> timedelta:
+        if self.stopped and self.end_time:
+            diff = self.end_time - self.start_time - self.total_paused
+            return cast(timedelta, diff)
+        if self.paused and self.pause_start:
+            diff = self.pause_start - self.start_time - self.total_paused
+            return cast(timedelta, diff)
+        diff = now_tehran() - self.start_time - self.total_paused
+        return cast(timedelta, diff)
+
+    def remaining_seconds(self) -> float:
+        return max(0.0, self.duration_seconds - self.elapsed().total_seconds())
+
+    def _format_time(self, seconds: float) -> str:
+        secs = max(0, int(seconds))
+        hours, remainder = divmod(secs, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    def _render_layout(self, theme: dict[str, str]) -> Layout:
+        remaining = self.remaining_seconds()
+        progress_pct = (
+            1.0 - (remaining / self.duration_seconds)
+            if self.duration_seconds > 0
+            else 1.0
+        )
+        timer_str = self._format_time(remaining)
+
+        layout = Layout()
+        layout.split(
+            Layout(name="header", size=5),
+            Layout(name="timer", size=11),
+            Layout(name="progress", size=5),
+            Layout(name="controls", size=3),
+        )
+
+        title_text = Text(self.title, style=f"bold {theme['info']}", justify="center")
+        layout["header"].update(Panel(title_text, border_style=theme["panel_border"]))
+
+        timer_renderable = Text(
+            timer_str, style=f"bold {theme['clock']}", justify="center"
+        )
+        layout["timer"].update(
+            Panel(timer_renderable, border_style=theme["panel_border"], padding=(2, 4))
+        )
+
+        prog = Progress(
+            BarColumn(bar_width=50, style=theme["accent"]),
+            TextColumn(f"  {int(progress_pct * 100)}%", style=theme["dim"]),
+        )
+        task = prog.add_task("", total=100)
+        prog.update(task, completed=progress_pct * 100)
+        layout["progress"].update(Panel(prog, border_style=theme["panel_border"]))
+
+        status = "PAUSED" if self.paused else "RUNNING"
+        controls = (
+            f"[{theme['info']}]p[/] Pause  "
+            f"[{theme['info']}]r[/] Resume  "
+            f"[{theme['info']}]s[/] Stop & Save  "
+            f"[{theme['dim']}]q[/] Quit  "
+            f"  [{theme['accent']}]{status}[/{theme['accent']}]"
+        )
+        layout["controls"].update(Panel(controls, border_style=theme["dim"]))
+
+        return layout
+
+    def run(self) -> Activity | None:
         theme = get_active_theme()
         self._play_music()
         if sys.platform != "win32":
@@ -404,20 +359,30 @@ class FocusSession:
 
                 termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
+        if self.cancelled:
+            return None
 
-def _parse_numbers(raw: str, theme: dict[str, str]) -> List[int]:
+        start_str = format_shamsi_datetime(self.start_time)
+        end_str = format_shamsi_datetime(self.end_time)
+        return Activity(
+            title=f"{self.title} #focus",
+            start_time=start_str,
+            end_time=end_str,
+        )
+
+
+def _parse_numbers(raw: str, theme: dict[str, str]) -> list[int]:
     try:
         return [int(x) for x in raw.split()]
     except ValueError:
         console.print(
-            f"[{theme['error']}]Invalid input. Use numbers separated by spaces.[/{theme['error']}]"
+            f"[{theme['error']}]Invalid input. "
+            f"Use numbers separated by spaces.[/{theme['error']}]"
         )
         return []
 
 
-def _build_log_table(
-    manager: TrackerManager, date_filter: Optional[str] = None
-) -> Table:
+def _build_log_table(manager: TrackerManager, date_filter: str | None = None) -> Table:
     theme = get_active_theme()
     if date_filter:
         activities = [a for a in manager.activities if a.date == date_filter]
@@ -550,8 +515,8 @@ def main_menu() -> None:
 
         elif cmd == "t":
             title = Prompt.ask("Activity title for timer")
-            session = TimerSession(title)
-            activity = session.run()
+            timer_session = TimerSession(title)
+            activity = timer_session.run()
             if activity:
                 manager.add_activity(
                     activity.title,
@@ -576,9 +541,9 @@ def main_menu() -> None:
                 music_status = "ON" if config["music_enabled"] else "OFF"
                 source = config.get("music_source", "none")
                 if source.startswith("builtin:"):
-                    src_label = f"[built-in] {source.split(':', 1)[1]}"
+                    src_label = f"[built-in] {Path(source.split(':', 1)[1]).stem}"
                 elif source.startswith("custom:"):
-                    src_label = f"[custom] {Path(source.split(':', 1)[1]).name}"
+                    src_label = f"[custom] {Path(source.split(':', 1)[1]).stem}"
                 else:
                     src_label = source
 
@@ -599,14 +564,17 @@ def main_menu() -> None:
                 elif choice == "s":
                     title = Prompt.ask("Activity title")
                     music_path = resolve_music_path(config)
-                    session = FocusSession(title, config["duration"], music_path)
-                    activity = session.run()
+                    focus_session = FocusSession(title, config["duration"], music_path)
+                    activity = focus_session.run()
                     if activity:
                         manager.add_activity(
-                            activity.title, activity.start_time, activity.end_time
+                            activity.title,
+                            activity.start_time,
+                            activity.end_time,
                         )
                         console.print(
-                            f"[{theme['success']}]Focus session saved.[/{theme['success']}]"
+                            f"[{theme['success']}]Focus session saved."
+                            f"[/{theme['success']}]"
                         )
                     else:
                         console.print(
@@ -639,7 +607,8 @@ def main_menu() -> None:
                 for aid in ids_to_remove:
                     manager.remove_activity(aid)
                 console.print(
-                    f"[{theme['success']}]Removed {len(ids_to_remove)} activity(s).[/{theme['success']}]"
+                    f"[{theme['success']}]Removed {len(ids_to_remove)} activity(s)."
+                    f"[/{theme['success']}]"
                 )
             Prompt.ask("Press Enter", default="")
 
@@ -659,7 +628,9 @@ def main_menu() -> None:
                 default="1",
             )
             fmt = Prompt.ask(
-                "Format (json/csv/txt)", choices=["json", "csv", "txt"], default="txt"
+                "Format (json/csv/txt)",
+                choices=["json", "csv", "txt"],
+                default="txt",
             )
             desktop = Path.home() / "Desktop"
             try:
@@ -667,15 +638,18 @@ def main_menu() -> None:
                     path = manager.export_data(desktop, fmt)
                 elif export_choice == "2":
                     date = Prompt.ask(
-                        f"Date (YYYY/MM/DD) [default: {today}]", default=today
+                        f"Date (YYYY/MM/DD) [default: {today}]",
+                        default=today,
                     )
                     path = manager.export_date_data(desktop, date, fmt)
                 else:
                     start = Prompt.ask(
-                        f"Start date (YYYY/MM/DD) [default: {today}]", default=today
+                        f"Start date (YYYY/MM/DD) [default: {today}]",
+                        default=today,
                     )
                     end = Prompt.ask(
-                        f"End date (YYYY/MM/DD) [default: {today}]", default=today
+                        f"End date (YYYY/MM/DD) [default: {today}]",
+                        default=today,
                     )
                     path = manager.export_date_range(desktop, start, end, fmt)
                 console.print(

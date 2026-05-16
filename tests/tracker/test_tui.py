@@ -15,7 +15,8 @@ def test_build_log_table_today(temp_data_dir):
     manager.add_activity("Break", "1404/08/25 12:00:00", "1404/08/25 12:30:00")
     # fake today
 
-    # We'll not filter by today because today is dynamic; we'll test filter by specific date
+    # We'll not filter by today because today is dynamic;
+    # we'll test filter by specific date
     table = _build_log_table(manager, date_filter="1404/08/25")
     assert table.row_count == 2
 

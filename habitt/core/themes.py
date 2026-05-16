@@ -6,6 +6,7 @@ Rich style syntax: "bold bright_blue on purple4", "italic #ff00ff", etc.
 """
 
 import json
+from typing import Any
 
 from habitt.core.config import CONFIG_FILE, get_data_dir
 

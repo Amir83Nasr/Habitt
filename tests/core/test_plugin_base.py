@@ -1,6 +1,5 @@
 """Tests for plugin system."""
 
-
 from habitt.core.plugin_base import PluginBase, _scan_directory, discover_plugins
 
 
