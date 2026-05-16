@@ -5,12 +5,11 @@ To add a custom theme, add a new entry to PRESETS.
 Rich style syntax: "bold bright_blue on purple4", "italic #ff00ff", etc.
 """
 
-from __future__ import annotations
-
 import json
 
-from habitt.core.config import CONFIG_FILE
+from habitt.core.config import CONFIG_FILE, get_data_dir
 
+# ---- Presets ----
 PRESETS: dict[str, dict[str, str]] = {
     "blue_purple": {
         "app_title": "bold bright_blue on purple4",
@@ -181,31 +180,74 @@ PRESETS: dict[str, dict[str, str]] = {
         "clock": "#81a1c1",
     },
 }
+DEFAULT_THEME = "blue_purple"
 
-DEFAULT_THEME: str = "blue_purple"
+CUSTOM_THEMES_DIR = get_data_dir() / "themes"
+
+
+def _validate_theme(data: dict[str, Any]) -> dict[str, str] | None:
+    """Return theme dict if data has all required keys, else None."""
+    required = {
+        "app_title",
+        "panel_border",
+        "success",
+        "warning",
+        "info",
+        "dim",
+        "accent",
+        "error",
+        "checkbox_done",
+        "checkbox_open",
+        "tag",
+        "clock",
+    }
+    if all(k in data for k in required):
+        return {k: str(data[k]) for k in required}
+    return None
+
+
+def load_custom_themes() -> dict[str, dict[str, str]]:
+    """Load user-defined themes from ~/.habitt/themes/*.json."""
+    themes: dict[str, dict[str, str]] = {}
+    if not CUSTOM_THEMES_DIR.exists():
+        return themes
+    for file in CUSTOM_THEMES_DIR.glob("*.json"):
+        try:
+            with open(file, encoding="utf-8") as f:
+                data = json.load(f)
+            theme = _validate_theme(data)
+            if theme:
+                themes[file.stem] = theme
+        except (json.JSONDecodeError, OSError):
+            pass
+    return themes
+
+
+def get_all_themes() -> dict[str, dict[str, str]]:
+    """Return built-in + custom themes (custom override built-in)."""
+    all_themes = dict(PRESETS)
+    all_themes.update(load_custom_themes())
+    return all_themes
 
 
 def get_active_theme() -> dict[str, str]:
-    """Load active theme from config file, fallback to DEFAULT_THEME."""
+    """Load active theme from config, fallback to DEFAULT_THEME."""
     theme_name = DEFAULT_THEME
     try:
         if CONFIG_FILE.exists():
             with open(CONFIG_FILE, encoding="utf-8") as f:
                 config = json.load(f)
             name = config.get("theme")
-            if name in PRESETS:
+            if name and name in get_all_themes():
                 theme_name = name
     except (json.JSONDecodeError, OSError):
         pass
-    return PRESETS.get(theme_name, PRESETS[DEFAULT_THEME])
+    return get_all_themes().get(theme_name, PRESETS[DEFAULT_THEME])
 
 
 def save_theme(theme_name: str) -> None:
-    """Save chosen theme to config file.
-
-    Raises ValueError if the theme name is not a valid preset.
-    """
-    if theme_name not in PRESETS:
+    """Save chosen theme to config file."""
+    if theme_name not in get_all_themes():
         raise ValueError(f"Unknown theme: {theme_name}")
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     config = {"theme": theme_name}

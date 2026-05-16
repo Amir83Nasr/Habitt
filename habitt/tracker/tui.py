@@ -1,24 +1,32 @@
-"""Interactive terminal UI for tracker using Rich – with configurable Pomodoro."""
+"""Interactive terminal UI for tracker using Rich – with Focus Mode."""
 
 from __future__ import annotations
 
 import json
 import select
+import signal
+import subprocess
 import sys
 import time
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, List, Optional
 
 from rich.console import Console
 from rich.layout import Layout
 from rich.live import Live
 from rich.panel import Panel
-from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
+from rich.progress import BarColumn, Progress, TextColumn
 from rich.prompt import Prompt
 from rich.table import Table
+from rich.text import Text
 
 from habitt.core.config import get_data_dir
+from habitt.core.focus_config import (
+    load_focus_config,
+    resolve_music_path,
+    save_focus_config,
+)
 from habitt.core.jalali_helper import (
     format_shamsi_datetime,
     now_tehran,
@@ -28,42 +36,57 @@ from habitt.core.jalali_helper import (
 from habitt.core.menu_utils import select_from_options
 from habitt.core.themes import get_active_theme
 from habitt.core.validators import prompt_time
-from habitt.tracker.models import Activity
 from habitt.tracker.tracker_manager import TrackerManager
 
 console = Console()
 
-POMODORO_CONFIG_FILE = get_data_dir() / "pomodoro_config.json"
+FOCUS_CONFIG_FILE = get_data_dir() / "focus_config.json"
+DEFAULT_FOCUS_CONFIG = {
+    "duration": 25,
+    "music_enabled": False,
+}
+DEFAULT_MUSIC_PATH = get_data_dir() / "focus_music" / "lo-fi.mp3"
+
+MUSIC_OPTIONS = {
+    "none": "No music",
+    "lo-fi": "Lo-Fi Hip Hop",
+    "nature": "Nature Sounds",
+}
 
 
-def load_pomodoro_config() -> dict[str, Any]:
-    default: dict[str, Any] = {
-        "work": 25,
-        "short_break": 5,
-        "long_break": 15,
-        "cycles": 4,
-    }
-    if POMODORO_CONFIG_FILE.exists():
+def get_music_path(music_key: str) -> str:
+    """Return the absolute path to the music file, or empty string if none."""
+    if music_key == "none":
+        return ""
+
+    return str(
+        importlib.resources.files("habitt") / "assets" / "music" / f"{music_key}.mp3"
+    )
+
+
+def load_focus_config() -> dict[str, Any]:
+    """Load focus configuration from JSON, falling back to defaults."""
+    if FOCUS_CONFIG_FILE.exists():
         try:
-            with open(POMODORO_CONFIG_FILE, encoding="utf-8") as f:
+            with open(FOCUS_CONFIG_FILE, encoding="utf-8") as f:
                 data = json.load(f)
-            if isinstance(data, dict):
-                for key in default:
-                    if key not in data:
-                        data[key] = default[key]
-                return data
+            for key, val in DEFAULT_FOCUS_CONFIG.items():
+                if key not in data:
+                    data[key] = val
+            return data
         except (json.JSONDecodeError, OSError):
             pass
-    return default
+    return dict(DEFAULT_FOCUS_CONFIG)
 
 
-def save_pomodoro_config(config: dict[str, Any]) -> None:
-    POMODORO_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(POMODORO_CONFIG_FILE, "w", encoding="utf-8") as f:
+def save_focus_config(config: dict[str, Any]) -> None:
+    """Save focus configuration to JSON."""
+    FOCUS_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(FOCUS_CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
 
 
-def _get_key_nonblocking() -> str | None:
+def _get_key_nonblocking() -> Optional[str]:
     if sys.platform == "win32":
         import msvcrt
 
@@ -77,6 +100,8 @@ def _get_key_nonblocking() -> str | None:
 
 
 class TimerSession:
+    """Simple timer with pause/resume/stop."""
+
     def __init__(self, title: str) -> None:
         self.title = title
         self.start_time = now_tehran()
@@ -89,13 +114,10 @@ class TimerSession:
 
     def elapsed(self) -> timedelta:
         if self.stopped and self.end_time:
-            diff = self.end_time - self.start_time - self.total_paused
-            return cast(timedelta, diff)
+            return self.end_time - self.start_time - self.total_paused
         if self.paused and self.pause_start:
-            diff = self.pause_start - self.start_time - self.total_paused
-            return cast(timedelta, diff)
-        diff = now_tehran() - self.start_time - self.total_paused
-        return cast(timedelta, diff)
+            return self.pause_start - self.start_time - self.total_paused
+        return now_tehran() - self.start_time - self.total_paused
 
     def _format_elapsed(self) -> str:
         seconds = int(self.elapsed().total_seconds())
@@ -103,7 +125,7 @@ class TimerSession:
         minutes, seconds = divmod(remainder, 60)
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
-    def run(self) -> Activity | None:
+    def run(self) -> Optional[Activity]:
         theme = get_active_theme()
         if sys.platform != "win32":
             import termios
@@ -186,39 +208,147 @@ class TimerSession:
         return layout
 
 
-class PomodoroSession:
-    def __init__(self, config: dict[str, Any]) -> None:
-        self.work_min = config["work"]
-        self.short_break_min = config["short_break"]
-        self.long_break_min = config["long_break"]
-        self.cycles_before_long = config["cycles"]
-        self.cycle = 0
+class FocusSession:
+    def __init__(self, title: str, duration_minutes: int, music_path: str = "") -> None:
+        self.title = title
+        self.duration_seconds = duration_minutes * 60
+        self.music_path = music_path
+        self.start_time = now_tehran()
+        self.paused = False
+        self.pause_start = None
+        self.total_paused = timedelta(0)
+        self.stopped = False
+        self.end_time = None
         self.cancelled = False
+        self.music_process: Optional[subprocess.Popen] = None
 
-    def run(self, manager: TrackerManager) -> None:
-        theme = get_active_theme()
-        while not self.cancelled:
-            self.cycle += 1
-            if not self._run_phase("Work", self.work_min, manager, theme):
-                break
-            if self.cycle % self.cycles_before_long == 0:
-                if not self._run_phase(
-                    "Long Break", self.long_break_min, manager, theme
-                ):
-                    break
+    def _render_layout(self, theme: dict[str, str]) -> Layout:
+        remaining = self.remaining_seconds()
+        progress_pct = (
+            1.0 - (remaining / self.duration_seconds)
+            if self.duration_seconds > 0
+            else 1.0
+        )
+        timer_str = self._format_time(remaining)
+
+        layout = Layout()
+        layout.split(
+            Layout(name="header", size=5),
+            Layout(name="timer", size=11),
+            Layout(name="progress", size=5),
+            Layout(name="controls", size=3),
+        )
+
+        # Title
+        title_text = Text(self.title, style=f"bold {theme['info']}", justify="center")
+        layout["header"].update(Panel(title_text, border_style=theme["panel_border"]))
+
+        # Big timer
+        timer_renderable = Text(
+            timer_str, style=f"bold {theme['clock']}", justify="center"
+        )
+        layout["timer"].update(
+            Panel(timer_renderable, border_style=theme["panel_border"], padding=(2, 4))
+        )
+
+        # Progress bar
+        prog = Progress(
+            BarColumn(bar_width=50, style=theme["accent"]),
+            TextColumn(f"  {int(progress_pct * 100)}%", style=theme["dim"]),
+        )
+        task = prog.add_task("", total=100)
+        prog.update(task, completed=progress_pct * 100)
+        layout["progress"].update(Panel(prog, border_style=theme["panel_border"]))
+
+        # Controls
+        status = "PAUSED" if self.paused else "RUNNING"
+        controls = (
+            f"[{theme['info']}]p[/] Pause  "
+            f"[{theme['info']}]r[/] Resume  "
+            f"[{theme['info']}]s[/] Stop & Save  "
+            f"[{theme['dim']}]q[/] Quit  "
+            f"  [{theme['accent']}]{status}[/{theme['accent']}]"
+        )
+        layout["controls"].update(Panel(controls, border_style=theme["dim"]))
+
+        return layout
+
+    def remaining_seconds(self) -> float:
+        return max(0.0, self.duration_seconds - self.elapsed().total_seconds())
+
+    def elapsed(self) -> timedelta:
+        if self.stopped and self.end_time:
+            return self.end_time - self.start_time - self.total_paused
+        if self.paused and self.pause_start:
+            return self.pause_start - self.start_time - self.total_paused
+        return now_tehran() - self.start_time - self.total_paused
+
+    def _format_time(self, seconds: float) -> str:
+        secs = max(0, int(seconds))
+        hours, remainder = divmod(secs, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    def _play_music(self) -> None:
+        if not self.music_path or not Path(self.music_path).exists():
+            return
+        try:
+            if sys.platform == "darwin":
+                self.music_process = subprocess.Popen(
+                    ["afplay", self.music_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            elif sys.platform == "win32":
+                self.music_process = subprocess.Popen(
+                    ["start", "/MIN", "wmplayer", "/loop", self.music_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    shell=True,
+                )
             else:
-                if not self._run_phase("Break", self.short_break_min, manager, theme):
-                    break
+                self.music_process = subprocess.Popen(
+                    ["mpg123", "--loop", "-1", "--quiet", self.music_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+        except Exception:
+            self.music_process = None
 
-    def _run_phase(
-        self, label: str, minutes: int, manager: TrackerManager, theme: dict[str, str]
-    ) -> bool:
-        total_seconds = minutes * 60
-        start_time = now_tehran()
-        paused = False
-        pause_start = None
-        total_paused = timedelta(0)
+    def _pause_music(self) -> None:
+        if self.music_process and sys.platform != "win32":
+            try:
+                self.music_process.send_signal(signal.SIGSTOP)
+            except Exception:
+                pass
 
+    def _resume_music(self) -> None:
+        if self.music_process and sys.platform != "win32":
+            try:
+                self.music_process.send_signal(signal.SIGCONT)
+            except Exception:
+                pass
+
+    def _stop_music(self) -> None:
+        if self.music_process and self.music_process.poll() is None:
+            if sys.platform == "win32":
+                self.music_process.terminate()
+            else:
+                try:
+                    self.music_process.send_signal(signal.SIGCONT)  # if paused
+                except Exception:
+                    pass
+                self.music_process.terminate()
+            try:
+                self.music_process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self.music_process.kill()
+        self.music_process = None
+
+    # متد run مثل قبله، فقط در ابتدا _play_music() و داخل کلیدها _pause/_resume صدا زده بشه.
+    def run(self) -> Optional[Activity]:
+        theme = get_active_theme()
+        self._play_music()
         if sys.platform != "win32":
             import termios
             import tty
@@ -226,93 +356,68 @@ class PomodoroSession:
             fd = sys.stdin.fileno()
             old_settings = termios.tcgetattr(fd)
             tty.setcbreak(fd)
-
         try:
-            progress = Progress(
-                TextColumn(f"[{theme['info']}]{label}[/{theme['info']}] "),
-                BarColumn(bar_width=40, style=theme["accent"]),
-                TaskProgressColumn(),
-                TextColumn("remaining"),
-            )
-            task = progress.add_task("", total=total_seconds)
-
-            with Live(progress, refresh_per_second=10, screen=True) as live:
+            with Live(
+                self._render_layout(theme),
+                refresh_per_second=10,
+                screen=True,
+                transient=False,
+            ) as live:
                 while True:
-                    elapsed = (now_tehran() - start_time) - total_paused
-                    remaining = total_seconds - elapsed.total_seconds()
-                    if remaining <= 0:
-                        break
-                    progress.update(task, completed=elapsed.total_seconds())
-                    live.update(progress)
-
+                    live.update(self._render_layout(theme))
                     key = _get_key_nonblocking()
                     if key:
-                        if key.lower() == "p" and not paused:
-                            paused = True
-                            pause_start = now_tehran()
-                        elif key.lower() == "r" and paused:
-                            if pause_start:
-                                total_paused += now_tehran() - pause_start
-                                pause_start = None
-                            paused = False
+                        if key.lower() == "p" and not self.paused:
+                            self.paused = True
+                            self.pause_start = now_tehran()
+                            self._pause_music()
+                        elif key.lower() == "r" and self.paused:
+                            if self.pause_start:
+                                self.total_paused += now_tehran() - self.pause_start
+                                self.pause_start = None
+                            self.paused = False
+                            self._resume_music()
+                        elif key.lower() == "s":
+                            self.stopped = True
+                            if self.paused and self.pause_start:
+                                self.total_paused += now_tehran() - self.pause_start
+                                self.pause_start = None
+                                self.paused = False
+                            self.end_time = now_tehran()
+                            break
                         elif key.lower() == "q":
                             self.cancelled = True
-                            return False
+                            break
+                    if self.remaining_seconds() <= 0:
+                        self.stopped = True
+                        self.end_time = (
+                            self.start_time
+                            + timedelta(seconds=self.duration_seconds)
+                            - self.total_paused
+                        )
+                        break
                     time.sleep(0.1)
         finally:
+            self._stop_music()
             if sys.platform != "win32":
                 import termios
 
                 termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
-        if label == "Work":
-            end_time = now_tehran()
-            title = f"Pomodoro #{self.cycle}"
-            start_str = format_shamsi_datetime(start_time)
-            end_str = format_shamsi_datetime(end_time)
-            manager.add_activity(title, start_str, end_str)
 
-        sys.stdout.write("\a")
-        sys.stdout.flush()
-        return True
-
-
-def _parse_numbers(raw: str, theme: dict[str, str]) -> list[int]:
+def _parse_numbers(raw: str, theme: dict[str, str]) -> List[int]:
     try:
         return [int(x) for x in raw.split()]
     except ValueError:
         console.print(
-            f"[{theme['error']}]Invalid input. Use numbers separated by spaces."
-            f"[/{theme['error']}]"
+            f"[{theme['error']}]Invalid input. Use numbers separated by spaces.[/{theme['error']}]"
         )
         return []
 
 
-def show_log(manager: TrackerManager) -> None:
-    """
-    Display all activities grouped by date.
-
-    If no activities exist, show a message.
-    """
-    theme = get_active_theme()
-    activities = manager.list_all()
-    if not activities:
-        console.print("No activities logged.", style=theme["dim"])
-        return
-
-    # Group by date
-    dates: dict[str, list[Activity]] = {}
-    for a in activities:
-        dates.setdefault(a.date, []).append(a)
-
-    for date_str, _day_activities in dates.items():
-        table = _build_log_table(manager, date_filter=date_str)
-        console.print(table)
-        console.print()
-
-
-def _build_log_table(manager: TrackerManager, date_filter: str | None = None) -> Table:
-    """Build a table for a single date or all activities (if date_filter is None)."""
+def _build_log_table(
+    manager: TrackerManager, date_filter: Optional[str] = None
+) -> Table:
     theme = get_active_theme()
     if date_filter:
         activities = [a for a in manager.activities if a.date == date_filter]
@@ -400,23 +505,23 @@ def main_menu() -> None:
             ("l", "Log"),
             ("a", "Add manual"),
             ("t", "Timer"),
-            ("p", "Pomodoro"),
+            ("f", "Focus"),
             ("r", "Remove"),
             ("s", "Stats"),
             ("e", "Export"),
             ("q", "Back"),
         ]
-        cmd = select_from_options(options, theme=theme, cancel_key="q")
+        cmd = select_from_options(options, theme=theme)
         if cmd is None or cmd == "q":
             break
 
-        elif cmd == "l":
+        if cmd == "l":
             date_input = Prompt.ask("Date (YYYY/MM/DD) or empty for all", default="")
             if date_input.strip():
                 log_table = _build_log_table(manager, date_filter=date_input.strip())
-                console.print(log_table)
             else:
-                show_log(manager)
+                log_table = _build_log_table(manager)
+            console.print(log_table)
             Prompt.ask("Press Enter to return", default="")
 
         elif cmd == "a":
@@ -445,8 +550,8 @@ def main_menu() -> None:
 
         elif cmd == "t":
             title = Prompt.ask("Activity title for timer")
-            timer_session = TimerSession(title)
-            activity = timer_session.run()
+            session = TimerSession(title)
+            activity = session.run()
             if activity:
                 manager.add_activity(
                     activity.title,
@@ -460,45 +565,64 @@ def main_menu() -> None:
                 console.print(f"[{theme['dim']}]Timer cancelled.[/{theme['dim']}]")
             Prompt.ask("Press Enter", default="")
 
-        elif cmd == "p":
-            config = load_pomodoro_config()
+        elif cmd == "f":
+            config = load_focus_config()
             while True:
+                theme = get_active_theme()
                 console.clear()
-                console.rule("Pomodoro Settings", style=theme["info"])
-                console.print(f"1. Work duration: {config['work']} min")
-                console.print(f"2. Short break: {config['short_break']} min")
-                console.print(f"3. Long break: {config['long_break']} min")
-                console.print(f"4. Cycles before long break: {config['cycles']}")
-                console.print("5. Start")
-                console.print("0. Back")
-                choice = Prompt.ask("Choose", choices=["0", "1", "2", "3", "4", "5"])
-                if choice == "0":
+                console.rule("Focus Mode", style=theme["info"])
+                console.print()
+
+                music_status = "ON" if config["music_enabled"] else "OFF"
+                source = config.get("music_source", "none")
+                if source.startswith("builtin:"):
+                    src_label = f"[built-in] {source.split(':', 1)[1]}"
+                elif source.startswith("custom:"):
+                    src_label = f"[custom] {Path(source.split(':', 1)[1]).name}"
+                else:
+                    src_label = source
+
+                console.print(f"Duration: [bold]{config['duration']} min[/bold]")
+                console.print(f"Music: [bold]{music_status}[/bold] ({src_label})")
+                console.print()
+
+                options = [
+                    ("s", "Start Focus"),
+                    ("d", f"Set Duration (currently {config['duration']} min)"),
+                    ("t", f"Toggle Music (currently {music_status})"),
+                    ("q", "Back"),
+                ]
+                choice = select_from_options(options, theme=theme)
+
+                if choice is None or choice == "q":
                     break
-                elif choice == "1":
-                    new_val = Prompt.ask("Work minutes", default=str(config["work"]))
-                    if new_val.isdigit() and int(new_val) > 0:
-                        config["work"] = int(new_val)
-                elif choice == "2":
-                    new_val = Prompt.ask(
-                        "Short break minutes", default=str(config["short_break"])
+                elif choice == "s":
+                    title = Prompt.ask("Activity title")
+                    music_path = resolve_music_path(config)
+                    session = FocusSession(title, config["duration"], music_path)
+                    activity = session.run()
+                    if activity:
+                        manager.add_activity(
+                            activity.title, activity.start_time, activity.end_time
+                        )
+                        console.print(
+                            f"[{theme['success']}]Focus session saved.[/{theme['success']}]"
+                        )
+                    else:
+                        console.print(
+                            f"[{theme['dim']}]Focus cancelled.[/{theme['dim']}]"
+                        )
+                    Prompt.ask("Press Enter", default="")
+                elif choice == "d":
+                    val = Prompt.ask(
+                        "Duration (minutes)", default=str(config["duration"])
                     )
-                    if new_val.isdigit() and int(new_val) >= 0:
-                        config["short_break"] = int(new_val)
-                elif choice == "3":
-                    new_val = Prompt.ask(
-                        "Long break minutes", default=str(config["long_break"])
-                    )
-                    if new_val.isdigit() and int(new_val) >= 0:
-                        config["long_break"] = int(new_val)
-                elif choice == "4":
-                    new_val = Prompt.ask("Cycles", default=str(config["cycles"]))
-                    if new_val.isdigit() and int(new_val) > 0:
-                        config["cycles"] = int(new_val)
-                elif choice == "5":
-                    save_pomodoro_config(config)
-                    pom_session = PomodoroSession(config)
-                    pom_session.run(manager)
-                    break
+                    if val.isdigit() and int(val) > 0:
+                        config["duration"] = int(val)
+                        save_focus_config(config)
+                elif choice == "t":
+                    config["music_enabled"] = not config["music_enabled"]
+                    save_focus_config(config)
 
         elif cmd == "r":
             today_items = manager.list_today()
@@ -515,8 +639,7 @@ def main_menu() -> None:
                 for aid in ids_to_remove:
                     manager.remove_activity(aid)
                 console.print(
-                    f"[{theme['success']}]Removed {len(ids_to_remove)} activity(s)."
-                    f"[/{theme['success']}]"
+                    f"[{theme['success']}]Removed {len(ids_to_remove)} activity(s).[/{theme['success']}]"
                 )
             Prompt.ask("Press Enter", default="")
 
@@ -547,7 +670,7 @@ def main_menu() -> None:
                         f"Date (YYYY/MM/DD) [default: {today}]", default=today
                     )
                     path = manager.export_date_data(desktop, date, fmt)
-                else:  # range
+                else:
                     start = Prompt.ask(
                         f"Start date (YYYY/MM/DD) [default: {today}]", default=today
                     )

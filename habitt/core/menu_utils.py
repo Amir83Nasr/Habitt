@@ -15,10 +15,8 @@ def select_from_options(
     title: str = "",
     theme: dict[str, str] | None = None,
     cancel_key: str = "q",
+    show_key: bool = True,
 ) -> str | None:
-    """
-    Display an arrow-navigable list and return the key of the selected option.
-    """
     if not options:
         return None
 
@@ -31,7 +29,10 @@ def select_from_options(
             out.append(title + "\n", style=theme.get("info", ""))
         for i, (key, label) in enumerate(options):
             prefix = "> " if i == idx else "  "
-            line = f"{prefix}[{key}] {label}"
+            if show_key:
+                line = f"{prefix}[{key}] {label}"
+            else:
+                line = f"{prefix}{label}"
             if i == idx:
                 out.append(line + "\n", style=theme.get("info", "bold"))
             else:
@@ -51,7 +52,9 @@ def select_from_options(
             elif key.lower() == cancel_key.lower():
                 return None
             else:
-                for _, (k, _) in enumerate(options):
-                    if k.lower() == key.lower():
-                        return k
+                # direct key shortcut only if show_key is True
+                if show_key:
+                    for _, (k, _) in enumerate(options):
+                        if k.lower() == key.lower():
+                            return k
             live.update(render(cancel_key))

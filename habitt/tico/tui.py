@@ -118,12 +118,15 @@ def main_menu() -> None:
             break
 
         if cmd == "a":
-            # Add
+            # Add task without clearing the screen
             title = Prompt.ask("Title")
             tag = Prompt.ask("Tag (optional)", default="")
-            current_tag = tag.strip() if tag.strip() else None
+            tag = tag.strip() if tag.strip() else None
             manager.add(title, tag)
-            console.print(f"[{theme['success']}]Added: {title}[/{theme['success']}]")
+            current_tag = None  # ← این خط رو اضافه کن: فیلتر رو بردار
+            console.print(
+                f"[{theme['success']}]Task added: {title}[/{theme['success']}]"
+            )
             Prompt.ask("Press Enter", default="")
 
         elif cmd == "t":

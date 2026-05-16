@@ -7,16 +7,10 @@ help: ## Show this help message
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
 install: ## Install the package
-	pip install .
+	python3 -m pip install .
 
 install-dev: ## Install with development dependencies
-	pip install -e ".[dev]"
-
-install-completion:
-	@echo "Add these lines to your ~/.zshrc or ~/.bashrc:"
-	@echo 'eval "$$(_HABITT_COMPLETE=source_zsh habitt)"'
-	@echo 'eval "$$(_TICO_COMPLETE=source_zsh tico)"'
-	@echo 'eval "$$(_TRACKER_COMPLETE=source_zsh tracker)"'
+	python3 -m pip install -e ".[dev]"
 
 test: ## Run tests with pytest
 	pytest

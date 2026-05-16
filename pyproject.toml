@@ -49,8 +49,16 @@ habitt = "habitt.cli:main"
 tico = "habitt.tico.cli:main"
 tracker = "habitt.tracker.cli:main"
 
+[project.urls]
+Homepage = "https://github.com/Amir83Nasr/habitt"
+Repository = "https://github.com/Amir83Nasr/habitt"
+Issues = "https://github.com/Amir83Nasr/habitt/issues"
+
 [tool.setuptools.packages.find]
 include = ["habitt", "habitt.*"]
+
+[tool.setuptools.package-data]
+habitt = ["assets/music/*"]
 
 [tool.black]
 line-length = 88

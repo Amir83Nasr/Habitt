@@ -88,3 +88,41 @@ def test_last_days_stats(temp_data_dir, monkeypatch):
     # Earlier days should be zero
     for _date_str, mins in stats[:-2]:
         assert mins == 0.0
+
+
+def test_export_json(temp_data_dir):
+    manager = TrackerManager()
+    manager.add_activity("A", "1404/08/25 10:00:00", "1404/08/25 11:00:00")
+    path = manager.export_data(temp_data_dir, "json")
+    assert path.exists()
+    data = json.load(open(path))
+    assert len(data) == 1
+
+
+def test_export_date_data_txt(temp_data_dir):
+    manager = TrackerManager()
+    manager.add_activity("A", "1404/08/25 10:00:00", "1404/08/25 11:00:00")
+    path = manager.export_date_data(temp_data_dir, "1404/08/25", "txt")
+    assert path.exists()
+    content = path.read_text()
+    assert "TRACKER REPORT" in content
+    assert "Total time: 1h 0m" in content
+
+
+def test_export_date_range_txt(temp_data_dir):
+    manager = TrackerManager()
+    manager.add_activity("A", "1404/08/25 10:00:00", "1404/08/25 11:00:00")
+    path = manager.export_date_range(temp_data_dir, "1404/08/25", "1404/08/25", "txt")
+    assert path.exists()
+
+
+def test_export_invalid_format(temp_data_dir):
+    manager = TrackerManager()
+    with pytest.raises(ValueError):
+        manager.export_data(temp_data_dir, "xml")
+
+
+def test_export_date_range_invalid_date(temp_data_dir):
+    manager = TrackerManager()
+    with pytest.raises(ValueError):
+        manager.export_date_range(temp_data_dir, "invalid", "1404/08/25", "txt")

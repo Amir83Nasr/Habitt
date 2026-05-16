@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 import click_completion
 from rich.columns import Columns
@@ -19,10 +21,75 @@ from habitt.core.config import (
 from habitt.core.jalali_helper import today_shamsi_str
 from habitt.core.menu_utils import select_from_options
 from habitt.core.plugin_base import PluginBase, discover_plugins
-from habitt.core.themes import PRESETS, get_active_theme, save_theme
+from habitt.core.themes import get_active_theme, get_all_themes, save_theme
 
 click_completion.init()
 console = Console()
+
+
+def focus_music_menu() -> None:
+    """Sub-menu for Focus music settings."""
+
+    from habitt.core.focus_config import (
+        list_builtin_music,
+        list_user_music,
+        load_focus_config,
+        save_focus_config,
+    )
+
+    config = load_focus_config()
+    while True:
+        theme = get_active_theme()
+        console.clear()
+        console.rule("Focus Music", style=theme["info"])
+        console.print()
+        console.print(
+            "[dim]Place your music files in ~/.habitt/focus_music/ "
+            "or use built-in tracks.[/dim]\n"
+        )
+
+        current = config.get("music_source", "none")
+        if current == "none":
+            status = "No music"
+        elif current.startswith("builtin:"):
+            name = current.split(":", 1)[1]
+            stem = Path(name).stem
+            status = f"[built-in] {stem}"
+        elif current.startswith("custom:"):
+            path = Path(current.split(":", 1)[1])
+            status = f"[custom] {path.stem}"
+        else:
+            status = current
+
+        console.print(f"Current: [bold]{status}[/bold]\n")
+
+        options: list[tuple[str, str]] = []
+
+        # Built-in music
+        for name in list_builtin_music():
+            stem = Path(name).stem
+            label = f"[built-in] {stem}"
+            if current == f"builtin:{name}":
+                label += " (active)"
+            options.append((f"builtin:{name}", label))
+
+        # User music
+        for f in list_user_music():
+            stem = f.stem
+            label = f"[custom] {stem}"
+            if current == f"custom:{f}":
+                label += " (active)"
+            options.append((f"custom:{f}", label))
+
+        options.append(("none", "No music"))
+        options.append(("0", "Back"))
+
+        choice = select_from_options(options, theme=theme, show_key=False)
+        if choice is None or choice == "0":
+            break
+        else:
+            config["music_source"] = choice
+            save_focus_config(config)
 
 
 def _get_current_theme_name() -> str:
@@ -44,7 +111,8 @@ def _get_current_theme_name() -> str:
 
 def theme_menu() -> None:
     """Sub-menu for theme selection."""
-    theme_names = list(PRESETS.keys())
+    all_themes = get_all_themes()
+    theme_names = list(all_themes.keys())
     current = _get_current_theme_name()
     while True:
         theme = get_active_theme()
@@ -77,7 +145,6 @@ def export_all_data() -> None:
     """Export both tico and tracker data to Desktop."""
     theme = get_active_theme()
     fmt = Prompt.ask("Format (json/csv/txt)", choices=["json", "csv", "txt"])
-    from pathlib import Path
 
     from habitt.tico.todo_manager import TodoManager
     from habitt.tracker.tracker_manager import TrackerManager
@@ -141,6 +208,7 @@ def reset_all_data() -> None:
 
 def settings_main_menu() -> None:
     """Main settings menu with arrow navigation."""
+
     while True:
         theme = get_active_theme()
         console.clear()
@@ -150,9 +218,11 @@ def settings_main_menu() -> None:
             ("2", "Export All Data"),
             ("3", "Change Data Directory"),
             ("4", "Reset All Data"),
+            ("5", "Focus Music"),
             ("0", "Back"),
         ]
         choice = select_from_options(options, theme=theme)
+
         if choice is None or choice == "0":
             break
         if choice == "1":
@@ -164,6 +234,8 @@ def settings_main_menu() -> None:
             change_data_dir()
         elif choice == "4":
             reset_all_data()
+        elif choice == "5":
+            focus_music_menu()
 
 
 def plugins_menu(plugins: list[PluginBase]) -> None:
