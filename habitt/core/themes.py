@@ -1,17 +1,17 @@
-"""
-Theme definitions and management for Habitt.
+"""Theme definitions and management for Habitt.
 
-Each theme is a dictionary mapping UI elements to Rich style strings.
-To add a custom theme, just add a new entry to PRESETS.
+Each theme is a dictionary mapping UI element names to Rich style strings.
+To add a custom theme, add a new entry to PRESETS.
 Rich style syntax: "bold bright_blue on purple4", "italic #ff00ff", etc.
 """
 
+from __future__ import annotations
+
 import json
-from typing import Dict
 
 from habitt.core.config import CONFIG_FILE
 
-PRESETS: Dict[str, Dict[str, str]] = {
+PRESETS: dict[str, dict[str, str]] = {
     "blue_purple": {
         "app_title": "bold bright_blue on purple4",
         "panel_border": "purple",
@@ -182,10 +182,10 @@ PRESETS: Dict[str, Dict[str, str]] = {
     },
 }
 
-DEFAULT_THEME = "blue_purple"
+DEFAULT_THEME: str = "blue_purple"
 
 
-def get_active_theme() -> Dict[str, str]:
+def get_active_theme() -> dict[str, str]:
     """Load active theme from config file, fallback to DEFAULT_THEME."""
     theme_name = DEFAULT_THEME
     try:
@@ -201,7 +201,10 @@ def get_active_theme() -> Dict[str, str]:
 
 
 def save_theme(theme_name: str) -> None:
-    """Save chosen theme to config file."""
+    """Save chosen theme to config file.
+
+    Raises ValueError if the theme name is not a valid preset.
+    """
     if theme_name not in PRESETS:
         raise ValueError(f"Unknown theme: {theme_name}")
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)

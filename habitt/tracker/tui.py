@@ -1,62 +1,69 @@
 """Interactive terminal UI for tracker using Rich – with configurable Pomodoro."""
 
+from __future__ import annotations
+
+import json
+import select
 import sys
 import time
-import select
-import json
 from datetime import timedelta
-from typing import Optional, List
 from pathlib import Path
+from typing import Any, cast
 
 from rich.console import Console
+from rich.layout import Layout
+from rich.live import Live
 from rich.panel import Panel
+from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 from rich.prompt import Prompt
 from rich.table import Table
-from rich.live import Live
-from rich.layout import Layout
-from rich.text import Text
-from rich.progress import Progress, BarColumn, TextColumn, TaskProgressColumn
 
-from habitt.core.themes import get_active_theme
+from habitt.core.config import get_data_dir
 from habitt.core.jalali_helper import (
-    now_tehran,
-    now_shamsi_str,
     format_shamsi_datetime,
+    now_tehran,
     shamsi_diff_seconds,
     today_shamsi_str,
 )
-from habitt.tracker.tracker_manager import TrackerManager
 from habitt.core.menu_utils import select_from_options
-from habitt.core.config import get_data_dir
+from habitt.core.themes import get_active_theme
 from habitt.core.validators import prompt_time
+from habitt.tracker.models import Activity
+from habitt.tracker.tracker_manager import TrackerManager
 
 console = Console()
 
 POMODORO_CONFIG_FILE = get_data_dir() / "pomodoro_config.json"
 
 
-def load_pomodoro_config() -> dict:
-    default = {"work": 25, "short_break": 5, "long_break": 15, "cycles": 4}
+def load_pomodoro_config() -> dict[str, Any]:
+    default: dict[str, Any] = {
+        "work": 25,
+        "short_break": 5,
+        "long_break": 15,
+        "cycles": 4,
+    }
     if POMODORO_CONFIG_FILE.exists():
         try:
-            with open(POMODORO_CONFIG_FILE, "r", encoding="utf-8") as f:
+            with open(POMODORO_CONFIG_FILE, encoding="utf-8") as f:
                 data = json.load(f)
-            for key in default:
-                if key not in data:
-                    data[key] = default[key]
-            return data
+            if isinstance(data, dict):
+                for key in default:
+                    if key not in data:
+                        data[key] = default[key]
+                return data
         except (json.JSONDecodeError, OSError):
             pass
     return default
 
 
-def save_pomodoro_config(config: dict) -> None:
+def save_pomodoro_config(config: dict[str, Any]) -> None:
     POMODORO_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(POMODORO_CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
 
 
-def _get_key_nonblocking() -> Optional[str]:
+def _get_key_nonblocking() -> str | None:
     if sys.platform == "win32":
         import msvcrt
 
@@ -82,10 +89,13 @@ class TimerSession:
 
     def elapsed(self) -> timedelta:
         if self.stopped and self.end_time:
-            return self.end_time - self.start_time - self.total_paused
+            diff = self.end_time - self.start_time - self.total_paused
+            return cast(timedelta, diff)
         if self.paused and self.pause_start:
-            return self.pause_start - self.start_time - self.total_paused
-        return now_tehran() - self.start_time - self.total_paused
+            diff = self.pause_start - self.start_time - self.total_paused
+            return cast(timedelta, diff)
+        diff = now_tehran() - self.start_time - self.total_paused
+        return cast(timedelta, diff)
 
     def _format_elapsed(self) -> str:
         seconds = int(self.elapsed().total_seconds())
@@ -93,7 +103,7 @@ class TimerSession:
         minutes, seconds = divmod(remainder, 60)
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
-    def run(self) -> Optional["Activity"]:
+    def run(self) -> Activity | None:
         theme = get_active_theme()
         if sys.platform != "win32":
             import termios
@@ -148,7 +158,7 @@ class TimerSession:
         end_str = format_shamsi_datetime(self.end_time)
         return Activity(title=self.title, start_time=start_str, end_time=end_str)
 
-    def _render_layout(self, theme: dict) -> Layout:
+    def _render_layout(self, theme: dict[str, str]) -> Layout:
         layout = Layout()
         layout.split(
             Layout(name="header", size=3),
@@ -177,7 +187,7 @@ class TimerSession:
 
 
 class PomodoroSession:
-    def __init__(self, config: dict) -> None:
+    def __init__(self, config: dict[str, Any]) -> None:
         self.work_min = config["work"]
         self.short_break_min = config["short_break"]
         self.long_break_min = config["long_break"]
@@ -201,7 +211,7 @@ class PomodoroSession:
                     break
 
     def _run_phase(
-        self, label: str, minutes: int, manager: TrackerManager, theme: dict
+        self, label: str, minutes: int, manager: TrackerManager, theme: dict[str, str]
     ) -> bool:
         total_seconds = minutes * 60
         start_time = now_tehran()
@@ -267,19 +277,42 @@ class PomodoroSession:
         return True
 
 
-def _parse_numbers(raw: str, theme: dict) -> List[int]:
+def _parse_numbers(raw: str, theme: dict[str, str]) -> list[int]:
     try:
         return [int(x) for x in raw.split()]
     except ValueError:
         console.print(
-            f"[{theme['error']}]Invalid input. Use numbers separated by spaces.[/{theme['error']}]"
+            f"[{theme['error']}]Invalid input. Use numbers separated by spaces."
+            f"[/{theme['error']}]"
         )
         return []
 
 
-def _build_log_table(
-    manager: TrackerManager, date_filter: Optional[str] = None
-) -> Table:
+def show_log(manager: TrackerManager) -> None:
+    """
+    Display all activities grouped by date.
+
+    If no activities exist, show a message.
+    """
+    theme = get_active_theme()
+    activities = manager.list_all()
+    if not activities:
+        console.print("No activities logged.", style=theme["dim"])
+        return
+
+    # Group by date
+    dates: dict[str, list[Activity]] = {}
+    for a in activities:
+        dates.setdefault(a.date, []).append(a)
+
+    for date_str, _day_activities in dates.items():
+        table = _build_log_table(manager, date_filter=date_str)
+        console.print(table)
+        console.print()
+
+
+def _build_log_table(manager: TrackerManager, date_filter: str | None = None) -> Table:
+    """Build a table for a single date or all activities (if date_filter is None)."""
     theme = get_active_theme()
     if date_filter:
         activities = [a for a in manager.activities if a.date == date_filter]
@@ -377,13 +410,13 @@ def main_menu() -> None:
         if cmd is None or cmd == "q":
             break
 
-        if cmd == "l":
+        elif cmd == "l":
             date_input = Prompt.ask("Date (YYYY/MM/DD) or empty for all", default="")
             if date_input.strip():
                 log_table = _build_log_table(manager, date_filter=date_input.strip())
+                console.print(log_table)
             else:
-                log_table = _build_log_table(manager)
-            console.print(log_table)
+                show_log(manager)
             Prompt.ask("Press Enter to return", default="")
 
         elif cmd == "a":
@@ -412,8 +445,8 @@ def main_menu() -> None:
 
         elif cmd == "t":
             title = Prompt.ask("Activity title for timer")
-            session = TimerSession(title)
-            activity = session.run()
+            timer_session = TimerSession(title)
+            activity = timer_session.run()
             if activity:
                 manager.add_activity(
                     activity.title,
@@ -436,8 +469,8 @@ def main_menu() -> None:
                 console.print(f"2. Short break: {config['short_break']} min")
                 console.print(f"3. Long break: {config['long_break']} min")
                 console.print(f"4. Cycles before long break: {config['cycles']}")
-                console.print(f"5. Start")
-                console.print(f"0. Back")
+                console.print("5. Start")
+                console.print("0. Back")
                 choice = Prompt.ask("Choose", choices=["0", "1", "2", "3", "4", "5"])
                 if choice == "0":
                     break
@@ -463,8 +496,8 @@ def main_menu() -> None:
                         config["cycles"] = int(new_val)
                 elif choice == "5":
                     save_pomodoro_config(config)
-                    session = PomodoroSession(config)
-                    session.run(manager)
+                    pom_session = PomodoroSession(config)
+                    pom_session.run(manager)
                     break
 
         elif cmd == "r":
@@ -482,7 +515,8 @@ def main_menu() -> None:
                 for aid in ids_to_remove:
                     manager.remove_activity(aid)
                 console.print(
-                    f"[{theme['success']}]Removed {len(ids_to_remove)} activity(s).[/{theme['success']}]"
+                    f"[{theme['success']}]Removed {len(ids_to_remove)} activity(s)."
+                    f"[/{theme['success']}]"
                 )
             Prompt.ask("Press Enter", default="")
 
@@ -513,7 +547,7 @@ def main_menu() -> None:
                         f"Date (YYYY/MM/DD) [default: {today}]", default=today
                     )
                     path = manager.export_date_data(desktop, date, fmt)
-                else:
+                else:  # range
                     start = Prompt.ask(
                         f"Start date (YYYY/MM/DD) [default: {today}]", default=today
                     )

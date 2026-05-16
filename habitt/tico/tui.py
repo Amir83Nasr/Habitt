@@ -1,26 +1,31 @@
 """Interactive terminal UI for tico using Rich – minimalist redesign."""
 
-from typing import List, Optional
+from __future__ import annotations
 
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
 
-from habitt.core.themes import get_active_theme
-from habitt.tico.todo_manager import TodoItem, TodoManager
 from habitt.core.menu_utils import select_from_options
+from habitt.core.themes import get_active_theme
+from habitt.tico.models import TodoItem  # فقط یکبار
+from habitt.tico.todo_manager import TodoManager  # TodoItem رو از این نیار
 
 console = Console()
 
 
-def _render_checkbox(done: bool, theme: dict) -> Text:
+def _render_checkbox(done: bool, theme: dict[str, str]) -> Text:
+    """Render a [x] or [ ] with theme colours."""
+
     if done:
         return Text("[x]", style=theme["checkbox_done"])
     return Text("[ ]", style=theme["checkbox_open"])
 
 
-def _render_title(item: TodoItem, theme: dict) -> Text:
+def _render_title(item: TodoItem, theme: dict[str, str]) -> Text:
+    """Render task title with strikethrough if done."""
+
     style = theme["dim"] if item.done else "bold"
     text = Text(item.title, style=style)
     if item.done:
@@ -28,13 +33,17 @@ def _render_title(item: TodoItem, theme: dict) -> Text:
     return text
 
 
-def _tag_str(tag: Optional[str], theme: dict) -> Text:
+def _tag_str(tag: str | None, theme: dict[str, str]) -> Text:
+    """Render tag with colour."""
+
     if tag:
         return Text(f"#{tag}", style=theme["tag"])
     return Text("")
 
 
-def _build_task_table(manager: TodoManager, tag: Optional[str] = None) -> Table:
+def _build_task_table(manager: TodoManager, tag: str | None = None) -> Table:
+    """Build the Rich table for the current task list."""
+
     theme = get_active_theme()
     items = manager.list_all(tag=tag, include_done=True)
 
@@ -64,12 +73,15 @@ def _build_task_table(manager: TodoManager, tag: Optional[str] = None) -> Table:
     return table
 
 
-def _parse_numbers(raw: str, theme: dict) -> List[int]:
+def _parse_numbers(raw: str, theme: dict[str, str]) -> list[int]:
+    """Convert space-separated numbers to ints, showing error on invalid input."""
+
     try:
         return [int(x) for x in raw.split()]
     except ValueError:
         console.print(
-            f"[{theme['error']}]Invalid input. Use numbers separated by spaces.[/{theme['error']}]"
+            f"[{theme['error']}]Invalid input. "
+            f"Use numbers separated by spaces.[/{theme['error']}]"
         )
         return []
 
@@ -77,7 +89,7 @@ def _parse_numbers(raw: str, theme: dict) -> List[int]:
 def main_menu() -> None:
     """Main TUI loop: tasks always on top, single-letter commands."""
     manager = TodoManager()
-    current_tag: Optional[str] = None
+    current_tag: str | None = None
 
     while True:
         theme = get_active_theme()
@@ -109,7 +121,7 @@ def main_menu() -> None:
             # Add
             title = Prompt.ask("Title")
             tag = Prompt.ask("Tag (optional)", default="")
-            tag = tag.strip() if tag.strip() else None
+            current_tag = tag.strip() if tag.strip() else None
             manager.add(title, tag)
             console.print(f"[{theme['success']}]Added: {title}[/{theme['success']}]")
             Prompt.ask("Press Enter", default="")
@@ -131,7 +143,8 @@ def main_menu() -> None:
                             toggled += 1
                 if toggled:
                     console.print(
-                        f"[{theme['success']}]Toggled {toggled} task(s).[/{theme['success']}]"
+                        f"[{theme['success']}]Toggled {toggled} task(s)."
+                        f"[/{theme['success']}]"
                     )
                 else:
                     console.print(
@@ -155,13 +168,14 @@ def main_menu() -> None:
                 for task_id in ids_to_remove:
                     manager.remove(task_id)
                 console.print(
-                    f"[{theme['success']}]Removed {len(ids_to_remove)} task(s).[/{theme['success']}]"
+                    f"[{theme['success']}]Removed {len(ids_to_remove)} task(s)."
+                    f"[/{theme['success']}]"
                 )
             Prompt.ask("Press Enter", default="")
 
         elif cmd == "f":
-            tag = Prompt.ask("Tag to filter")
-            current_tag = tag.strip() if tag.strip() else None
+            tag_input = Prompt.ask("Tag to filter")
+            current_tag = tag_input.strip() if tag_input.strip() else None
 
         elif cmd == "s":
             current_tag = None  # reset filter
@@ -171,6 +185,7 @@ def main_menu() -> None:
 
         else:
             console.print(
-                f"[{theme['error']}]Unknown command. Use A, T, R, F, S, Q.[/{theme['error']}]"
+                f"[{theme['error']}]Unknown command. Use A, T, R, F, S, Q."
+                f"[/{theme['error']}]"
             )
             Prompt.ask("Press Enter", default="")

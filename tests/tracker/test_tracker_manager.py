@@ -86,5 +86,5 @@ def test_last_days_stats(temp_data_dir, monkeypatch):
     assert stats[-2][0] == yesterday_str
     assert stats[-2][1] == 60.0
     # Earlier days should be zero
-    for date_str, mins in stats[:-2]:
+    for _date_str, mins in stats[:-2]:
         assert mins == 0.0

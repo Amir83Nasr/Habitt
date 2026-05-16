@@ -1,7 +1,9 @@
 """Data model for a todo item."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any
 
 from habitt.core.jalali_helper import now_shamsi_str
 
@@ -10,11 +12,11 @@ from habitt.core.jalali_helper import now_shamsi_str
 class TodoItem:
     title: str
     done: bool = False
-    tag: Optional[str] = None
+    tag: str | None = None
     created_at: str = field(default_factory=now_shamsi_str)
-    id: str = ""  # will be set by manager when adding
+    id: str = ""
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "title": self.title,
@@ -24,7 +26,7 @@ class TodoItem:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "TodoItem":
+    def from_dict(cls, data: dict[str, Any]) -> TodoItem:
         item = cls(
             title=data["title"],
             done=data.get("done", False),

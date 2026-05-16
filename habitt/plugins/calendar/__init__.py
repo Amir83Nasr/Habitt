@@ -1,9 +1,11 @@
 """Shamsi Calendar plugin for Habitt – follows active theme."""
 
+from __future__ import annotations
+
 import jdatetime
 from rich.console import Console
-from rich.table import Table
 from rich.prompt import Prompt
+from rich.table import Table
 from rich.text import Text
 
 from habitt.core.plugin_base import PluginBase
@@ -50,7 +52,7 @@ class CalendarPlugin(PluginBase):
                 break
 
     def _build_month_table(
-        self, year: int, month: int, theme: dict, today: jdatetime.date
+        self, year: int, month: int, theme: dict[str, str], today: jdatetime.date
     ) -> Table:
         month_names = [
             "",
@@ -100,7 +102,7 @@ class CalendarPlugin(PluginBase):
         # Build rows
         current_day = 1
         # First row: fill blank until first weekday
-        week = [""] * 7
+        week: list[Text | str] = [Text("")] * 7
         for i in range(first_weekday, 7):
             if current_day <= days_in_month:
                 week[i] = self._format_day(current_day, year, month, today, theme)
@@ -109,19 +111,24 @@ class CalendarPlugin(PluginBase):
 
         # Remaining rows
         while current_day <= days_in_month:
-            week = [""] * 7
+            new_week: list[Text | str] = [Text("")] * 7
             for i in range(7):
                 if current_day <= days_in_month:
                     week[i] = self._format_day(current_day, year, month, today, theme)
                     current_day += 1
                 else:
                     break
-            table.add_row(*week)
+            table.add_row(*new_week)
 
         return table
 
     def _format_day(
-        self, day: int, year: int, month: int, today: jdatetime.date, theme: dict
+        self,
+        day: int,
+        year: int,
+        month: int,
+        today: jdatetime.date,
+        theme: dict[str, str],
     ) -> Text:
         """Return a styled Text for the given day number."""
         date = jdatetime.date(year, month, day)

@@ -1,43 +1,49 @@
 """Main entry point for habitt launcher (tico + tracker + plugins)."""
 
+from __future__ import annotations
+
 import click
+import click_completion
+from rich.columns import Columns
 from rich.console import Console
 from rich.panel import Panel
-from rich.columns import Columns
-from rich.progress import Progress, BarColumn, TextColumn
-from rich.text import Text
+from rich.progress import BarColumn, Progress, TextColumn
 from rich.prompt import Prompt
 
-from habitt.core.themes import get_active_theme, save_theme, PRESETS
 from habitt.core.config import (
-    get_data_dir,
-    set_data_dir,
-    get_plugins_dir,
     get_builtin_plugins_dir,
+    get_data_dir,
+    get_plugins_dir,
+    set_data_dir,
 )
 from habitt.core.jalali_helper import today_shamsi_str
-from habitt.core.plugin_base import discover_plugins
 from habitt.core.menu_utils import select_from_options
+from habitt.core.plugin_base import PluginBase, discover_plugins
+from habitt.core.themes import PRESETS, get_active_theme, save_theme
 
+click_completion.init()
 console = Console()
 
 
 def _get_current_theme_name() -> str:
+    """Return the name of the currently active theme."""
     import json
 
     try:
         from habitt.core.config import CONFIG_FILE
 
-        if CONFIG_FILE.exists():
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            return config.get("theme", "blue_purple")
+        with open(CONFIG_FILE, encoding="utf-8") as f:
+            config = json.load(f)
+        theme = config.get("theme", "blue_purple")
+        if isinstance(theme, str):
+            return theme
     except Exception:
         pass
     return "blue_purple"
 
 
 def theme_menu() -> None:
+    """Sub-menu for theme selection."""
     theme_names = list(PRESETS.keys())
     current = _get_current_theme_name()
     while True:
@@ -50,7 +56,7 @@ def theme_menu() -> None:
             marker = " (active)" if name == current else ""
             options.append((str(i), f"{name}{marker}"))
         options.append(("0", "Back"))
-        choice = select_from_options(options, theme=theme, cancel_key="q")
+        choice = select_from_options(options, theme=theme)
         if choice is None or choice == "0":
             break
         idx = int(choice) - 1
@@ -59,7 +65,8 @@ def theme_menu() -> None:
                 save_theme(theme_names[idx])
                 current = theme_names[idx]
                 console.print(
-                    f"[{theme['success']}]Theme changed to '{current}'.[/{theme['success']}]"
+                    f"[{theme['success']}]Theme changed to '{current}'."
+                    f"[/{theme['success']}]"
                 )
             except Exception as e:
                 console.print(f"[{theme['error']}]Error: {e}[/{theme['error']}]")
@@ -67,9 +74,11 @@ def theme_menu() -> None:
 
 
 def export_all_data() -> None:
+    """Export both tico and tracker data to Desktop."""
     theme = get_active_theme()
     fmt = Prompt.ask("Format (json/csv/txt)", choices=["json", "csv", "txt"])
     from pathlib import Path
+
     from habitt.tico.todo_manager import TodoManager
     from habitt.tracker.tracker_manager import TrackerManager
 
@@ -87,6 +96,7 @@ def export_all_data() -> None:
 
 
 def change_data_dir() -> None:
+    """Prompt user for a new data directory and save it."""
     theme = get_active_theme()
     console.clear()
     console.rule("Change Data Directory", style=theme["info"])
@@ -97,7 +107,8 @@ def change_data_dir() -> None:
         try:
             set_data_dir(new_path.strip())
             console.print(
-                f"[{theme['success']}]Data directory changed to {new_path}[/{theme['success']}]"
+                f"[{theme['success']}]Data directory changed to {new_path}"
+                f"[/{theme['success']}]"
             )
             console.print("[yellow]Note: existing data was not moved.[/yellow]")
         except Exception as e:
@@ -108,11 +119,13 @@ def change_data_dir() -> None:
 
 
 def reset_all_data() -> None:
+    """Delete all todo and tracker data files after confirmation."""
     theme = get_active_theme()
     console.clear()
     console.rule("Reset All Data", style=theme["error"])
     console.print(
-        "[bold red]This will permanently delete all your tasks and activities.[/bold red]"
+        "[bold red]This will permanently delete all your tasks and "
+        "activities.[/bold red]"
     )
     confirm = Prompt.ask("Type 'YES' to confirm")
     if confirm != "YES":
@@ -127,6 +140,7 @@ def reset_all_data() -> None:
 
 
 def settings_main_menu() -> None:
+    """Main settings menu with arrow navigation."""
     while True:
         theme = get_active_theme()
         console.clear()
@@ -138,7 +152,7 @@ def settings_main_menu() -> None:
             ("4", "Reset All Data"),
             ("0", "Back"),
         ]
-        choice = select_from_options(options, theme=theme, cancel_key="q")
+        choice = select_from_options(options, theme=theme)
         if choice is None or choice == "0":
             break
         if choice == "1":
@@ -152,7 +166,8 @@ def settings_main_menu() -> None:
             reset_all_data()
 
 
-def plugins_menu(plugins: list) -> None:
+def plugins_menu(plugins: list[PluginBase]) -> None:
+    """Sub-menu showing available plugins."""
     theme = get_active_theme()
     while True:
         console.clear()
@@ -165,7 +180,7 @@ def plugins_menu(plugins: list) -> None:
         for i, plugin in enumerate(plugins, start=1):
             options.append((str(i), f"{plugin.name} - {plugin.description}"))
         options.append(("0", "Back"))
-        choice = select_from_options(options, theme=theme, cancel_key="q")
+        choice = select_from_options(options, theme=theme)
         if choice is None or choice == "0":
             break
         idx = int(choice) - 1
@@ -174,6 +189,7 @@ def plugins_menu(plugins: list) -> None:
 
 
 def launcher_menu() -> None:
+    """Display the main launcher menu with dashboard and arrow navigation."""
     while True:
         theme = get_active_theme()
         console.clear()
@@ -201,7 +217,9 @@ def launcher_menu() -> None:
         )
         task_bar = task_progress
         task_bar.add_task(
-            "", total=total_tasks if total_tasks > 0 else 1, completed=done_tasks
+            "",
+            total=total_tasks if total_tasks > 0 else 1,
+            completed=int(done_tasks),
         )
 
         target_minutes = 8 * 60
@@ -214,7 +232,7 @@ def launcher_menu() -> None:
         time_bar.add_task(
             "",
             total=target_minutes if target_minutes > 0 else 1,
-            completed=today_minutes,
+            completed=int(today_minutes),
         )
 
         left_panel = Panel(task_bar, title="Tasks", border_style=theme["panel_border"])
@@ -231,7 +249,7 @@ def launcher_menu() -> None:
             ("4", "Plugins"),
             ("0", "Exit"),
         ]
-        choice = select_from_options(options, theme=theme, cancel_key="q")
+        choice = select_from_options(options, theme=theme)
         if choice is None or choice == "0":
             break
         if choice == "1":
@@ -259,6 +277,7 @@ def main(ctx: click.Context) -> None:
 
 @main.command()
 def todo() -> None:
+    """Launch tico directly."""
     from habitt.tico.tui import main_menu as tico_menu
 
     tico_menu()
@@ -266,6 +285,7 @@ def todo() -> None:
 
 @main.command()
 def track() -> None:
+    """Launch tracker directly."""
     from habitt.tracker.tui import main_menu as tracker_menu
 
     tracker_menu()
@@ -273,6 +293,7 @@ def track() -> None:
 
 @main.command("plugins")
 def list_plugins() -> None:
+    """List all installed plugins."""
     plugins = discover_plugins(get_plugins_dir(), get_builtin_plugins_dir())
     if not plugins:
         console.print("[dim]No plugins found.[/dim]")
@@ -285,6 +306,7 @@ def list_plugins() -> None:
 @click.argument("name")
 @click.argument("action", required=False, default="tui")
 def run_plugin(name: str, action: str) -> None:
+    """Run a plugin by name (default: tui)."""
     plugins = discover_plugins(get_plugins_dir(), get_builtin_plugins_dir())
     for plugin in plugins:
         if plugin.name == name:
@@ -311,11 +333,6 @@ def reset(force: bool) -> None:
     for name in ["tico.json", "tracker.json", "timer_state.json"]:
         (data_dir / name).unlink(missing_ok=True)
     click.echo("All data cleared.")
-
-
-import click_completion
-
-click_completion.init()
 
 
 if __name__ == "__main__":

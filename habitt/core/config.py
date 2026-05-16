@@ -1,22 +1,29 @@
-"""Central configuration for paths and constants."""
+"""Central configuration for paths and constants.
+
+Provides functions to get and set data and plugin directories,
+and manages the configuration file.
+"""
+
+from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
-APP_NAME = "habitt"
-DEFAULT_DATA_DIR = Path.home() / f".{APP_NAME}"
-CONFIG_FILE = DEFAULT_DATA_DIR / "config.json"
+APP_NAME: str = "habitt"
+DEFAULT_DATA_DIR: Path = Path.home() / f".{APP_NAME}"
+CONFIG_FILE: Path = DEFAULT_DATA_DIR / "config.json"
 
-# Make sure default dir exists for config
 DEFAULT_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _load_config() -> dict:
-    """Load config.json as dict, or return empty dict."""
+def _load_config() -> dict[str, Any]:
     if CONFIG_FILE.exists():
         try:
             with open(CONFIG_FILE, encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
         except (json.JSONDecodeError, OSError):
             pass
     return {}
@@ -34,21 +41,23 @@ def get_data_dir() -> Path:
 
 
 def get_tico_file() -> Path:
+    """Return path to the tico JSON file."""
     return get_data_dir() / "tico.json"
 
 
 def get_tracker_file() -> Path:
+    """Return path to the tracker JSON file."""
     return get_data_dir() / "tracker.json"
 
 
 def get_timer_state_file() -> Path:
+    """Return path to the timer state JSON file."""
     return get_data_dir() / "timer_state.json"
 
 
 def set_data_dir(path_str: str) -> None:
     """Save a new data directory path to config.json."""
     new_path = Path(path_str).expanduser().resolve()
-    # Validate that we can create it
     new_path.mkdir(parents=True, exist_ok=True)
     config = _load_config()
     config["data_dir"] = str(new_path)

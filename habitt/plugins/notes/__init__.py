@@ -1,20 +1,20 @@
 """Quick Notes plugin for Habitt – simple note-taking."""
 
-import json
+from __future__ import annotations
+
 import csv
-from datetime import datetime
+import json
 from pathlib import Path
-from typing import List, Optional
+from typing import Any
 
 from rich.console import Console
-from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
 
+from habitt.core.jalali_helper import now_shamsi_str
 from habitt.core.plugin_base import PluginBase
 from habitt.core.themes import get_active_theme
-from habitt.core.jalali_helper import now_shamsi_str
 
 console = Console()
 
@@ -27,14 +27,14 @@ class NotesPlugin(PluginBase):
     description = "Quick notes – jot down ideas and thoughts"
 
     def __init__(self) -> None:
-        self.notes: List[dict] = []
+        self.notes: list[dict[str, Any]] = []
         NOTES_DIR.mkdir(parents=True, exist_ok=True)
         self._load()
 
     def _load(self) -> None:
         if NOTES_FILE.exists():
             try:
-                with open(NOTES_FILE, "r", encoding="utf-8") as f:
+                with open(NOTES_FILE, encoding="utf-8") as f:
                     self.notes = json.load(f)
             except (json.JSONDecodeError, OSError):
                 self.notes = []
@@ -82,7 +82,7 @@ class NotesPlugin(PluginBase):
                 console.print(f"[{theme['error']}]Unknown command.[/{theme['error']}]")
                 Prompt.ask("Press Enter", default="")
 
-    def _add_note(self, theme: dict) -> None:
+    def _add_note(self, theme: dict[str, Any]) -> None:
         """Add a new note."""
         title = Prompt.ask("Title")
         body = Prompt.ask("Body (optional)", default="")
@@ -96,7 +96,7 @@ class NotesPlugin(PluginBase):
         console.print(f"[{theme['success']}]Note added.[/{theme['success']}]")
         Prompt.ask("Press Enter", default="")
 
-    def _list_notes(self, theme: dict) -> None:
+    def _list_notes(self, theme: dict[str, Any]) -> None:
         """Display notes as a table."""
         if not self.notes:
             console.print("No notes yet.", style=theme["dim"])
@@ -116,7 +116,7 @@ class NotesPlugin(PluginBase):
 
         console.print(table)
 
-    def _search_notes(self, theme: dict) -> None:
+    def _search_notes(self, theme: dict[str, Any]) -> None:
         """Search notes by keyword."""
         keyword = Prompt.ask("Search keyword").strip().lower()
         if not keyword:
@@ -142,7 +142,7 @@ class NotesPlugin(PluginBase):
                 console.print()
         Prompt.ask("Press Enter", default="")
 
-    def _delete_notes(self, theme: dict) -> None:
+    def _delete_notes(self, theme: dict[str, Any]) -> None:
         """Delete notes by row numbers."""
         if not self.notes:
             console.print("No notes to delete.", style=theme["dim"])
@@ -166,7 +166,7 @@ class NotesPlugin(PluginBase):
         console.print(f"[{theme['success']}]Notes deleted.[/{theme['success']}]")
         Prompt.ask("Press Enter", default="")
 
-    def _export_notes(self, theme: dict) -> None:
+    def _export_notes(self, theme: dict[str, Any]) -> None:
         """Export notes to Desktop."""
         fmt = Prompt.ask(
             "Format (json/csv/txt)", choices=["json", "csv", "txt"], default="json"

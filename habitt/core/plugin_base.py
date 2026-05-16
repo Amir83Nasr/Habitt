@@ -1,23 +1,33 @@
-import importlib
+"""Plugin system for Habitt: base class and discovery.
+
+Scans both user and built-in directories for plugins.
+"""
+
+from __future__ import annotations
+
+import importlib.util
 import sys
 from pathlib import Path
-from typing import List
 
 
 class PluginBase:
+    """Every Habitt plugin must inherit from this class."""
+
     name: str = ""
     description: str = ""
 
     def run_tui(self) -> None:
+        """Launch the plugin's TUI. Override in subclass."""
         raise NotImplementedError
 
-    def cli(self, args: List[str]) -> None:
+    def cli(self, args: list[str]) -> None:
+        """Handle command-line arguments. Override in subclass."""
         pass
 
 
-def _scan_directory(plugins_dir: Path) -> List[PluginBase]:
+def _scan_directory(plugins_dir: Path) -> list[PluginBase]:
     """Scan one directory for Habitt plugins."""
-    plugins = []
+    plugins: list[PluginBase] = []
     if not plugins_dir.exists():
         return plugins
     for item in sorted(plugins_dir.iterdir()):
@@ -49,7 +59,7 @@ def _scan_directory(plugins_dir: Path) -> List[PluginBase]:
     return plugins
 
 
-def discover_plugins(user_dir: Path, builtin_dir: Path) -> List[PluginBase]:
+def discover_plugins(user_dir: Path, builtin_dir: Path) -> list[PluginBase]:
     """Discover plugins from both user and built-in directories."""
     plugins = _scan_directory(user_dir)
     plugins += _scan_directory(builtin_dir)

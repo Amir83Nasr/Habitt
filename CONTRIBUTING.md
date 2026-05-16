@@ -86,8 +86,7 @@ habitt/
 ├── README.md
 ├── .gitignore
 ├── .pre-commit-config.yaml
-├── src/
-│   └── habitt/                   # Main package
+├── habitt/                   # Main package
 │       ├── __init__.py
 │       ├── __version__.py
 │       ├── cli.py                # Launcher (habitt command)

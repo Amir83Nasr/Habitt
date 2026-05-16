@@ -1,16 +1,21 @@
 """Click-based CLI for quick tracker commands (start/pause/resume/stop)."""
 
+from __future__ import annotations
+
 import json
 from dataclasses import asdict, dataclass
-from typing import Optional
 
 import click
 import click_completion
 from rich.console import Console
 
 from habitt.core.config import get_timer_state_file
-from habitt.core.jalali_helper import (now_shamsi_str, now_tehran,
-                                       parse_shamsi_datetime, today_shamsi_str)
+from habitt.core.jalali_helper import (
+    now_shamsi_str,
+    now_tehran,
+    parse_shamsi_datetime,
+    today_shamsi_str,
+)
 from habitt.tracker.tracker_manager import TrackerManager
 from habitt.tracker.tui import _build_log_table, _build_stats_table
 
@@ -22,11 +27,11 @@ class TimerState:
     title: str
     start_time: str
     paused: bool = False
-    pause_start: Optional[str] = None
+    pause_start: str | None = None
     total_paused_seconds: float = 0.0
 
 
-def _load_timer_state() -> Optional[TimerState]:
+def _load_timer_state() -> TimerState | None:
     filepath = get_timer_state_file()
     if not filepath.exists():
         return None
@@ -96,14 +101,15 @@ def resume() -> None:
     if not state.paused:
         click.echo("Timer is not paused.")
         return
-    pause_dt = parse_shamsi_datetime(state.pause_start)
-    now_dt = now_tehran()
-    paused_seconds = (now_dt - pause_dt).total_seconds()
-    state.total_paused_seconds += paused_seconds
-    state.paused = False
-    state.pause_start = None
-    _save_timer_state(state)
-    click.echo("Timer resumed.")
+    if state.pause_start is not None:
+        pause_dt = parse_shamsi_datetime(state.pause_start)
+        now_dt = now_tehran()
+        paused_seconds = (now_dt - pause_dt).total_seconds()
+        state.total_paused_seconds += paused_seconds
+        state.paused = False
+        state.pause_start = None
+        _save_timer_state(state)
+        click.echo("Timer resumed.")
 
 
 @main.command()
@@ -164,7 +170,7 @@ def reset(force: bool) -> None:
         if not confirm:
             click.echo("Cancelled.")
             return
-    from habitt.core.config import get_tracker_file, get_timer_state_file
+    from habitt.core.config import get_timer_state_file, get_tracker_file
 
     get_tracker_file().unlink(missing_ok=True)
     get_timer_state_file().unlink(missing_ok=True)

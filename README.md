@@ -123,7 +123,7 @@ habitt/
 ├── README.md
 ├── .gitignore
 ├── .pre-commit-config.yaml
-└── src/
+└── habitt/
     └── habitt/
         ├── __init__.py
         ├── core/

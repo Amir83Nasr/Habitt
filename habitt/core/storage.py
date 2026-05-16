@@ -1,4 +1,9 @@
-"""Simple JSON file storage for todos and activities."""
+"""Simple JSON file storage for todos and activities.
+
+Provides safe load and save operations that handle missing or corrupt files.
+"""
+
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -6,7 +11,10 @@ from typing import Any
 
 
 def load_json(filepath: Path) -> Any:
-    """Load and return data from a JSON file. Returns empty list if file missing or corrupt."""
+    """Load and return data from a JSON file.
+
+    Returns an empty list if the file does not exist or is corrupt.
+    """
     if not filepath.exists():
         return []
     try:
@@ -17,7 +25,10 @@ def load_json(filepath: Path) -> Any:
 
 
 def save_json(filepath: Path, data: Any) -> None:
-    """Save data to a JSON file with indentation."""
+    """Save data to a JSON file with indentation.
+
+    Creates parent directories if they don't exist.
+    """
     filepath.parent.mkdir(parents=True, exist_ok=True)
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)

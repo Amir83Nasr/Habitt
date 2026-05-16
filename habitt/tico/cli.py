@@ -1,5 +1,7 @@
 """Click-based CLI for quick todo commands."""
 
+from __future__ import annotations
+
 import click
 import click_completion
 from rich.console import Console
@@ -18,15 +20,13 @@ def _resolve_task_id(manager: TodoManager, identifier: str) -> str:
     """
     try:
         num = int(identifier)
-        # Row numbers are 1-based; list is in creation order
         if 1 <= num <= len(manager.items):
             return manager.items[num - 1].id
         else:
             raise click.BadParameter(f"No task at row {num}.")
     except ValueError:
-        # Not a number – assume it's an ID
         if manager.get_by_id(identifier) is None:
-            raise click.BadParameter(f"No task with ID '{identifier}'.")
+            raise click.BadParameter(f"No task with ID '{identifier}'.") from None
         return identifier
 
 

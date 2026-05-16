@@ -1,6 +1,7 @@
 """Arrow-navigable menu utility for Habitt TUI."""
 
-from typing import List, Optional, Tuple
+from __future__ import annotations
+
 import readchar
 from rich.console import Console
 from rich.live import Live
@@ -10,22 +11,13 @@ console = Console()
 
 
 def select_from_options(
-    options: List[Tuple[str, str]],
+    options: list[tuple[str, str]],
     title: str = "",
-    theme: Optional[dict] = None,
+    theme: dict[str, str] | None = None,
     cancel_key: str = "q",
-) -> Optional[str]:
+) -> str | None:
     """
     Display an arrow-navigable list and return the key of the selected option.
-
-    Args:
-        options: List of (key, label) tuples.
-        title: Optional header text.
-        theme: Active theme dict for styling.
-        cancel_key: Key to cancel and return None.
-
-    Returns:
-        The key string of the chosen option, or None if cancelled.
     """
     if not options:
         return None
@@ -33,7 +25,7 @@ def select_from_options(
     idx = 0
     theme = theme or {}
 
-    def render():
+    def render(cancel_key: str) -> Text:
         out = Text()
         if title:
             out.append(title + "\n", style=theme.get("info", ""))
@@ -47,7 +39,7 @@ def select_from_options(
         out.append(f"\n↑/↓ move  Enter select  {cancel_key} cancel")
         return out
 
-    with Live(render(), refresh_per_second=10, screen=False) as live:
+    with Live(render(cancel_key), refresh_per_second=10, screen=False) as live:
         while True:
             key = readchar.readkey()
             if key == readchar.key.UP:
@@ -59,8 +51,7 @@ def select_from_options(
             elif key.lower() == cancel_key.lower():
                 return None
             else:
-                # Direct key shortcut
-                for i, (k, _) in enumerate(options):
+                for _, (k, _) in enumerate(options):
                     if k.lower() == key.lower():
                         return k
-            live.update(render())
+            live.update(render(cancel_key))

@@ -1,22 +1,22 @@
-"""Data model for a logged activity."""
+from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
 class Activity:
     title: str
-    start_time: str  # Shamsi datetime string
-    end_time: str  # Shamsi datetime string
-    date: str = ""  # Shamsi date extracted from start_time
+    start_time: str
+    end_time: str
+    date: str = ""
     id: str = ""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:  # خط ۱۶
         if not self.date:
-            # date part is YYYY/MM/DD
             self.date = self.start_time.split()[0]
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:  # خط ۲۱
         return {
             "id": self.id,
             "title": self.title,
@@ -26,7 +26,7 @@ class Activity:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Activity":
+    def from_dict(cls, data: dict[str, Any]) -> Activity:  # خط ۳۱
         return cls(
             id=data.get("id", ""),
             title=data["title"],

@@ -9,7 +9,7 @@ help: ## Show this help message
 install: ## Install the package
 	pip install .
 
-dev-install: ## Install with development dependencies
+install-dev: ## Install with development dependencies
 	pip install -e ".[dev]"
 
 install-completion:
@@ -22,23 +22,28 @@ test: ## Run tests with pytest
 	pytest
 
 test-cov:
-	pytest --cov=src/habitt --cov-report=term --cov-report=html --cov-fail-under=80 tests/
+	pytest --cov=habitt/habitt --cov-report=term --cov-report=html --cov-fail-under=80 tests/
+
+test_type-check: ## Type-check with mypy
+	mypy habitt/
 
 lint: ## Lint source and test files with ruff
-	ruff check src/ tests/
+	ruff check habitt/ tests/
 
 lint-fix: ## Lint and fix source and test files with ruff
-	ruff check --fix src/ tests/
+	ruff check --fix habitt/ tests/
 
 format: ## Format code with black and ruff
-	isort src/ tests/
-	black src/ tests/
-	ruff format src/ tests/
-
-type-check: ## Type-check with mypy
-	mypy src/
+	isort habitt/ tests/
+	black habitt/ tests/
+	ruff format habitt/ tests/
 
 clean: ## Remove build artifacts and caches
 	rm -rf build/ dist/ *.egg-info .mypy_cache .pytest_cache .ruff_cache
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
+
+publish:
+	rm -rf dist/
+	python -m build
+	twine upload dist/*
