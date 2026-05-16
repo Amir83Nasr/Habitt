@@ -1,10 +1,11 @@
 # Habitt
 
-**T**erminal **I**ntegrated **C**o**mm**and-line **O**rganizer & **T**racker
+## Terminal-based habit tracker with todo (tico) and activity logger (tracker)
 
-Manage your daily tasks and activities from the comfort of your terminal.
-Built with [Rich](https://github.com/Textualize/rich), [Click](https://click.palletsprojects.com/),
-and love for the command line.
+Manage your daily tasks and activities entirely from the terminal.
+Built with [Rich](https://github.com/Textualize/rich) for a beautiful TUI,
+[Click](https://click.palletsprojects.com/) for a powerful CLI,
+and [jdatetime](https://github.com/slashmili/python-jalali) for Shamsi (Jalali) calendar support.
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-purple.svg)
@@ -14,20 +15,69 @@ and love for the command line.
 
 ## Features
 
-- **Todo Manager (`tico`)** – simple task lists with checkboxes (`[x]` / `[ ]`) and tags.
-- **Activity Tracker (`tracker`)** – log daily activities with a live timer (pause, resume, stop) and weekly statistics.
-- **Launcher (`habit`)** – a unified entry point to both tools.
-- **Jalali (Shamsi) calendar** – all dates and times in Asia/Tehran timezone.
-- **Rich TUI** – beautiful terminal interface with panels, tables, and layouts.
-- **CLI mode** – fast command-line access for scripting and power users.
-- **JSON storage** – no database servers, data lives in `~/.habitt/`.
-- **Dev tools** – pre-configured `black`, `ruff`, `mypy`, `pre-commit`, and `pytest`.
+### 📋 Tico – Todo Manager
+
+- Simple checkboxes (`[x]` / `[ ]`) like Markdown
+- Tag-based organization (`#work`, `#personal`, ...)
+- Arrow-key navigable menu
+- Add, toggle, remove tasks by row number
+- Filter by tag
+- Bulk operations (toggle/remove multiple tasks at once)
+
+### ⏱️ Tracker – Activity Logger
+
+- Log daily activities with start/end times
+- **Live timer** with pause, resume, stop
+- **Deep Focus Mode** with full-screen timer, progress bar, and optional background music
+- Manual time entry with automatic date and time validation
+- Daily and weekly statistics with bar charts
+- Export to JSON, CSV, or beautifully formatted TXT files
+- Remove activities by row number
+
+### 🧩 Plugin System
+
+- Built-in plugins: **Calendar** (Shamsi), **Pomodoro Timer**, **Quick Notes**
+- User plugins via `~/.habitt/plugins/`
+- Automatic discovery of user and built-in plugins
+
+### 🎨 Custom Themes
+
+- 12 built-in color themes (blue_purple, forest, ocean, sunset, nord, ...)
+- Custom themes via JSON files in `~/.habitt/themes/`
+- Instant preview in settings menu
+
+### ⚙️ Settings
+
+- Theme selection with live preview
+- Change data directory
+- Export all data (JSON/CSV/TXT) to Desktop
+- Focus music settings (built-in or custom Lo-Fi tracks)
+- Reset all data with confirmation
+
+### 🛡️ Data Safety
+
+- Automatic backups of data files (last 10 versions)
+- JSON storage in `~/.habitt/` (no database server needed)
+- Validated date/time input to prevent corruption
+
+### ⌨️ Terminal Experience
+
+- Arrow-key navigation in all menus
+- Single-key shortcuts for quick actions
+- Tab completion for CLI commands (bash/zsh)
+- Beautiful Rich-based tables, panels, and progress bars
 
 ---
 
 ## Installation
 
-Clone and install in development mode:
+### From PyPI (recommended)
+
+```bash
+pip install habitt
+```
+
+### From source (development mode)
 
 ```bash
 git clone https://github.com/yourusername/habitt.git
@@ -36,114 +86,111 @@ pip install -e ".[dev]"
 pre-commit install
 ```
 
-The three commands `habit`, `tico`, `tracker` will now be available system-wide.
+Three commands become available globally: `habitt`, `tico`, `tracker`.
+
+### Shell Completion (optional)
+
+Add to your `~/.zshrc` or `~/.bashrc`:
+
+```bash
+eval "$(_HABITT_COMPLETE=source_zsh habitt)"
+eval "$(_TICO_COMPLETE=source_zsh tico)"
+eval "$(_TRACKER_COMPLETE=source_zsh tracker)"
+```
 
 ---
 
-## Usage
+## Quick Start
 
-### Launcher
+### Launch the main menu
 
 ```bash
-habit
-# Shows a menu to enter tico or tracker
-
-habit todo      # Open tico directly
-habit track     # Open tracker directly
+habitt
 ```
 
-### Tico – Todo Manager
+Arrow keys to navigate, Enter to select, `q` to go back.
 
-**Interactive TUI**  
-Run `tico` (or `habit todo`) to enter the menu, then:
-
-- View all tasks
-- Add a task with optional tag
-- Toggle done/undone
-- Remove a task
-- Filter by tag
-
-**CLI shortcuts**
+### Direct access
 
 ```bash
-tico add "buy groceries" --tag personal
+habitt todo          # Open tico directly
+habitt track         # Open tracker directly
+```
+
+### Todo commands (CLI)
+
+```bash
+tico add "Buy groceries" --tag personal
 tico list
 tico list --tag work
-tico done <task_id>
-tico undo <task_id>
-tico remove <task_id>
+tico done 3           # Mark row 3 as done
+tico undo 3
+tico remove 3
+tico export --format csv
 ```
 
-Task display uses checkboxes:
+### Tracker commands (CLI)
 
 ```bash
-[x] Done task        #tag
-[ ] Open task        #another_tag
+tracker start "Deep work"    # Start timer
+tracker pause
+tracker resume
+tracker stop                 # Stop and save
+tracker log                  # Show today's activities
+tracker stats                # Weekly statistics
+tracker export --format txt  # Export to Desktop
 ```
-
-### Tracker – Activity Logger
-
-**Interactive TUI**  
-Run `tracker` (or `habit track`) to:
-
-- Show today's logged activities
-- Add an activity manually (with Shamsi times)
-- Start a live timer with **p**ause, **r**esume, **s**top & save, **q**uit
-- View daily statistics for the last 7 days (including a simple bar chart)
-
-**CLI shortcuts**
-
-```bash
-tracker start "deep work"   # Start a new timer
-tracker pause               # Pause the timer
-tracker resume              # Resume the timer
-tracker stop                # Stop timer and save activity
-tracker log                 # Show today's activities
-tracker stats               # Show 7‑day summary
-```
-
----
-
-## Data Storage
-
-All data is saved as JSON files in `~/.habitt/`:
-
-- `tico.json` – todo items
-- `tracker.json` – logged activities
-- `timer_state.json` – temporary timer state (for CLI mode)
 
 ---
 
 ## Project Structure
 
-```
+```text
 habitt/
-├── pyproject.toml
-├── Makefile
+├── pyproject.toml               # Project metadata and tool configs
+├── Makefile                      # Development commands
 ├── README.md
+├── LICENSE
 ├── .gitignore
-├── .pre-commit-config.yaml
-└── habitt/
+├── habitt/                       # Main package
+│   ├── __init__.py
+│   ├── __version__.py
+│   ├── cli.py                    # Launcher (habitt command)
+│   ├── __main__.py               # python -m habitt
+│   ├── core/                     # Shared utilities
+│   │   ├── config.py             # Paths and configuration
+│   │   ├── storage.py            # JSON file I/O
+│   │   ├── themes.py             # Color presets + custom themes
+│   │   ├── jalali_helper.py      # Shamsi date/time functions
+│   │   ├── validators.py         # Input validation helpers
+│   │   ├── menu_utils.py         # Arrow-navigable menus
+│   │   ├── plugin_base.py        # Plugin system
+│   │   ├── backup.py             # Automatic backup
+│   │   └── focus_config.py       # Focus mode settings
+│   ├── tico/                     # Todo manager
+│   │   ├── models.py
+│   │   ├── todo_manager.py
+│   │   ├── tui.py
+│   │   └── cli.py
+│   ├── tracker/                  # Activity logger
+│   │   ├── models.py
+│   │   ├── tracker_manager.py
+│   │   ├── tui.py
+│   │   └── cli.py
+│   ├── plugins/                  # Built-in plugins
+│   │   ├── calendar/
+│   │   ├── notes/
+│   │   └── pomodoro/
+│   └── assets/
+│       └── music/                # Built-in focus music
+│           └── lo-fi.mp3
+└── tests/                        # Test suite
+    ├── conftest.py
+    ├── core/
+    ├── tico/
+    ├── tracker/
+    ├── plugins/
     └── habitt/
-        ├── __init__.py
-        ├── core/
-        │   ├── config.py
-        │   ├── storage.py
-        │   ├── themes.py
-        │   └── jalali_helper.py
-        ├── tico/
-        │   ├── models.py
-        │   ├── todo_manager.py
-        │   ├── tui.py
-        │   └── cli.py
-        ├── tracker/
-        │   ├── models.py
-        │   ├── tracker_manager.py
-        │   ├── tui.py
-        │   └── cli.py
-        └── habit/
-            ├── tui.py
-            └── cli.py
 ```
 
 ---
@@ -154,26 +201,77 @@ habitt/
 make dev-install   # Install with dev dependencies
 make format        # Run black and ruff
 make lint          # Run ruff linter
+make lint-fix      # Auto-fix lint issues
 make type-check    # Run mypy
-make test          # Run pytest (once tests are added)
+make test          # Run pytest
+make test-cov      # Run tests with coverage (80%+ required)
 make clean         # Remove build artifacts
 ```
 
-Pre-commit hooks will automatically format and lint your code before every commit.
+Pre-commit hooks automatically format and lint code before every commit.
+
+---
+
+## Plugins
+
+### Built-in Plugins
+
+| Plugin          | Description                                   |
+| --------------- | --------------------------------------------- |
+| **Calendar**    | Shamsi monthly calendar with Persian weekdays |
+| **Pomodoro**    | Configurable work/break cycles                |
+| **Quick Notes** | Simple note-taking with search and export     |
+
+### Creating a Custom Plugin
+
+1. Create a folder in `~/.habitt/plugins/your-plugin/`
+2. Add an `__init__.py` with a class inheriting from `PluginBase`:
+
+```python
+from habitt.core.plugin_base import PluginBase
+
+class MyPlugin(PluginBase):
+    name = "my-plugin"
+    description = "What it does"
+
+    def run_tui(self):
+        # Your TUI code here
+        pass
+```
+
+1. Restart Habitt – your plugin appears in the Plugins menu.
+
+---
+
+## Data Storage
+
+All data lives in `~/.habitt/`:
+
+- `tico.json` – tasks
+- `tracker.json` – activities
+- `focus_config.json` – focus settings
+- `backups/` – automatic backups (last 10 versions)
+- `themes/` – custom theme JSON files
+- `plugins/` – user-installed plugins
+- `focus_music/` – user's focus music files
+
+Data directory can be changed from Settings.
 
 ---
 
 ## License
 
-MIT. See `pyproject.toml` for details.
+MIT – see [LICENSE](LICENSE) for details.
 
 ---
 
 ## Acknowledgements
 
-- [Rich](https://github.com/Textualize/rich) for the stunning terminal UI
-- [jdatetime](https://github.com/slashmili/python-jalali) for Jalali date support
-- [Click](https://click.palletsprojects.com/) for the CLI framework
+- [Rich](https://github.com/Textualize/rich) – stunning terminal UI
+- [jdatetime](https://github.com/slashmili/python-jalali) – Jalali date support
+- [Click](https://click.palletsprojects.com/) – CLI framework
+- [readchar](https://github.com/magmax/python-readchar) – key press detection
+- [pytest](https://pytest.org/) – testing framework
 
 ---
 
