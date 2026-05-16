@@ -18,9 +18,6 @@ test: ## Run tests with pytest
 test-cov:
 	pytest --cov=habitt --cov-report=term --cov-report=html --cov-fail-under=80 tests/
 
-test-type-check: ## Type-check with mypy
-	mypy habitt/
-
 lint: ## Lint source and test files with ruff
 	ruff check habitt/ tests/
 
@@ -31,6 +28,9 @@ format: ## Format code with black and ruff
 	isort habitt/ tests/
 	black habitt/ tests/
 	ruff format habitt/ tests/
+
+type-check: ## Type-check with mypy
+	mypy habitt/
 
 clean: ## Remove build artifacts and caches
 	rm -rf build/ dist/ *.egg-info .mypy_cache .pytest_cache .ruff_cache htmlcov/ .coverage

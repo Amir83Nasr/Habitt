@@ -145,7 +145,10 @@ class TimerSession:
             Layout(name="timer", size=5),
             Layout(name="controls", size=5),
         )
-        header = Panel(f"Timer: {self.title}", style=theme["app_title"])
+        header = Panel(
+            f"Timer: {self.title or 'Untitled'}",
+            style=theme["app_title"],
+        )
         status = "PAUSED" if self.paused else "RUNNING"
         timer_text = (
             f"[{theme['clock']}]Elapsed: {self._format_elapsed()}   "
@@ -514,10 +517,13 @@ def main_menu() -> None:
             Prompt.ask("Press Enter", default="")
 
         elif cmd == "t":
-            title = Prompt.ask("Activity title for timer")
-            timer_session = TimerSession(title)
-            activity = timer_session.run()
+            # Start timer without title
+            session = TimerSession("")
+            activity = session.run()
             if activity:
+                # Ask for title after timer stops
+                title = Prompt.ask("Activity title")
+                activity.title = title
                 manager.add_activity(
                     activity.title,
                     activity.start_time,
