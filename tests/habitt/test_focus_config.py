@@ -64,3 +64,27 @@ def test_list_user_music_empty(temp_data_dir):
     from habitt.core.focus_config import list_user_music
 
     assert list_user_music() == []
+
+
+def test_list_user_music_with_file(temp_data_dir, monkeypatch):
+    """Test that list_user_music picks up a file in the user music dir."""
+    from habitt.core.focus_config import list_user_music
+
+    music_dir = temp_data_dir / "focus_music"
+    monkeypatch.setattr(
+        "habitt.core.focus_config.get_user_music_dir", lambda: music_dir
+    )
+    music_dir.mkdir(parents=True, exist_ok=True)
+    # Create a dummy mp3 file
+    (music_dir / "test.mp3").write_text("")
+    files = list_user_music()
+    assert len(files) == 1
+    assert files[0].name == "test.mp3"
+
+
+def test_list_builtin_music_exists():
+    """Test that built-in music list is a list (might be empty if no assets)."""
+    from habitt.core.focus_config import list_builtin_music
+
+    result = list_builtin_music()
+    assert isinstance(result, list)

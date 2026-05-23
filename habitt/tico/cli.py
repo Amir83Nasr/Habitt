@@ -6,6 +6,7 @@ import click
 import click_completion
 from rich.console import Console
 
+from habitt.core.jalali_helper import today_shamsi_str
 from habitt.tico.todo_manager import TodoManager
 from habitt.tico.tui import _build_task_table
 
@@ -44,15 +45,6 @@ def add(title: str, tag: str | None) -> None:
     manager = TodoManager()
     item = manager.add(title, tag)
     click.echo(f"Added: {item.id} - {item.title}")
-
-
-@main.command()
-@click.option("--tag", "-t", default=None, help="Filter by tag")
-def list(tag: str | None) -> None:
-    """List tasks (use --tag to filter)."""
-    manager = TodoManager()
-    table = _build_task_table(manager, tag=tag)
-    console.print(table)
 
 
 @main.command()
@@ -99,20 +91,6 @@ def remove(identifier: str) -> None:
 
 
 @main.command()
-@click.option(
-    "--format", "-f", "fmt", default="json", type=click.Choice(["json", "csv", "txt"])
-)
-def export(fmt: str) -> None:
-    """Export all tasks to Desktop."""
-    from pathlib import Path
-
-    manager = TodoManager()
-    desktop = Path.home() / "Desktop"
-    path = manager.export_data(desktop, fmt)
-    click.echo(f"Exported to {path}")
-
-
-@main.command()
 @click.option("--force", is_flag=True, help="Skip confirmation")
 def reset(force: bool) -> None:
     """Delete all tasks."""
@@ -125,6 +103,34 @@ def reset(force: bool) -> None:
 
     get_tico_file().unlink(missing_ok=True)
     click.echo("All tasks deleted.")
+
+
+@main.command()
+@click.option("--tag", "-t", default=None, help="Filter by tag")
+@click.option("--date", "-d", default=None, help="Filter by date (YYYY/MM/DD)")
+def list(tag: str | None, date: str | None) -> None:
+    manager = TodoManager()
+    if date is None:
+        date = today_shamsi_str()  # پیش‌فرض امروز برای CLI هم
+    table = _build_task_table(manager, tag=tag, date=date)
+    console.print(table)
+
+
+@main.command()
+@click.option(
+    "--format", "-f", "fmt", default="json", type=click.Choice(["json", "csv", "txt"])
+)
+@click.option("--date", "-d", default=None, help="Export specific date (YYYY/MM/DD)")
+def export(fmt: str, date: str | None) -> None:
+    from pathlib import Path
+
+    manager = TodoManager()
+    desktop = Path.home() / "Desktop"
+    if date:
+        path = manager.export_date_data(desktop, date, fmt)
+    else:
+        path = manager.export_data(desktop, fmt)
+    click.echo(f"Exported to {path}")
 
 
 click_completion.init()

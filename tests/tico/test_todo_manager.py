@@ -98,3 +98,23 @@ def test_export_invalid_format(temp_data_dir):
     manager = TodoManager()
     with pytest.raises(ValueError):
         manager.export_data(temp_data_dir, "xml")
+
+
+def test_export_date_data_txt(temp_data_dir):
+    manager = TodoManager()
+    manager.add("Task 1", date="1404/09/01")
+    manager.add("Task 2", date="1404/09/01")
+    path = manager.export_date_data(temp_data_dir, "1404/09/01", "txt")
+    assert path.exists()
+    content = path.read_text()
+    assert "Task 1" in content
+    assert "Task 2" in content
+
+
+def test_available_dates(temp_data_dir):
+    manager = TodoManager()
+    manager.add("Task 1", date="1404/09/01")
+    manager.add("Task 2", date="1404/09/02")
+    dates = manager.available_dates()
+    assert "1404/09/01" in dates
+    assert "1404/09/02" in dates

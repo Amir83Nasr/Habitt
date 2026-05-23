@@ -215,10 +215,11 @@ def settings_main_menu() -> None:
         console.rule("S E T T I N G S", style=theme["info"])
         options = [
             ("1", "Theme"),
-            ("2", "Export All Data"),
-            ("3", "Change Data Directory"),
-            ("4", "Reset All Data"),
-            ("5", "Focus Music"),
+            ("2", "Focus Music"),
+            ("3", "Notifications"),
+            ("4", "Export All Data"),
+            ("5", "Change Data Directory"),
+            ("6", "Reset All Data"),
             ("0", "Back"),
         ]
         choice = select_from_options(options, theme=theme)
@@ -228,14 +229,15 @@ def settings_main_menu() -> None:
         if choice == "1":
             theme_menu()
         elif choice == "2":
-            export_all_data()
-            Prompt.ask("Press Enter to continue", default="")
-        elif choice == "3":
-            change_data_dir()
-        elif choice == "4":
-            reset_all_data()
-        elif choice == "5":
             focus_music_menu()
+        elif choice == "3":
+            notify_settings_menu()
+        elif choice == "4":
+            export_all_data()
+        elif choice == "5":
+            change_data_dir()
+        elif choice == "6":
+            reset_all_data()
 
 
 def plugins_menu(plugins: list[PluginBase]) -> None:
@@ -271,13 +273,15 @@ def launcher_menu() -> None:
         from habitt.tico.todo_manager import TodoManager
         from habitt.tracker.tracker_manager import TrackerManager
 
+        today_str = today_shamsi_str()
         todo_mgr = TodoManager()
-        open_tasks = len(todo_mgr.list_all(include_done=False))
-        total_tasks = len(todo_mgr.list_all())
+
+        open_tasks = len(todo_mgr.list_all(date=today_str, include_done=False))
+        total_tasks = len(todo_mgr.list_all(date=today_str, include_done=True))
         done_tasks = total_tasks - open_tasks
 
         tracker_mgr = TrackerManager()
-        today_minutes = tracker_mgr.daily_total_minutes(today_shamsi_str())
+        today_minutes = tracker_mgr.daily_total_minutes(today_str)
         hours = int(today_minutes // 60)
         mins = int(today_minutes % 60)
         time_str = f"{hours}h {mins}m"
@@ -317,26 +321,34 @@ def launcher_menu() -> None:
         options = [
             ("1", "Tico"),
             ("2", "Tracker"),
-            ("3", "Settings"),
-            ("4", "Plugins"),
+            ("3", "Plugins"),
+            ("4", "Send Report"),
+            ("5", "Settings"),
             ("0", "Exit"),
         ]
         choice = select_from_options(options, theme=theme)
         if choice is None or choice == "0":
             break
+
         if choice == "1":
             from habitt.tico.tui import main_menu as tico_menu
 
             tico_menu()
+
         elif choice == "2":
             from habitt.tracker.tui import main_menu as tracker_menu
 
             tracker_menu()
+
         elif choice == "3":
-            settings_main_menu()
-        elif choice == "4":
             plugins = discover_plugins(get_plugins_dir(), get_builtin_plugins_dir())
             plugins_menu(plugins)
+
+        elif choice == "4":
+            _send_report_tui()
+
+        elif choice == "5":
+            settings_main_menu()
 
 
 @click.group(invoke_without_command=True)
@@ -405,6 +417,131 @@ def reset(force: bool) -> None:
     for name in ["tico.json", "tracker.json", "timer_state.json"]:
         (data_dir / name).unlink(missing_ok=True)
     click.echo("All data cleared.")
+
+
+@main.command()
+@click.option(
+    "--type",
+    "-t",
+    "report_type",
+    default="today",
+    type=click.Choice(["today", "tasks", "activities"]),
+    help="Type of report to send",
+)
+def notify(report_type: str) -> None:
+    """Send a summary report to the configured messenger."""
+    from habitt.core.notify_config import load_notify_config
+    from habitt.core.report import build_and_send_report
+
+    config = load_notify_config()
+    if not config["enabled"]:
+        console.print(
+            "[yellow]Notifications are disabled. Enable them in Settings.[/yellow]"
+        )
+        return
+
+    success, _ = build_and_send_report(report_type)
+    if success:
+        console.print("[green]Report sent successfully.[/green]")
+    else:
+        console.print("[red]Failed to send report. Check settings and network.[/red]")
+
+
+def notify_settings_menu() -> None:
+    """Arrow-navigable menu for notification settings."""
+    from habitt.core.notify_config import load_notify_config, save_notify_config
+
+    config = load_notify_config()
+    while True:
+        theme = get_active_theme()
+        console.clear()
+        console.rule("Notification Settings", style=theme["info"])
+        console.print(f"Enabled: [bold]{'Yes' if config['enabled'] else 'No'}[/bold]")
+        token_display = (
+            "*" * len(config["bot_token"]) if config["bot_token"] else "Not set"
+        )
+        console.print(f"Bot Token: [dim]{token_display}[/dim]")
+        console.print(f"Chat ID: [dim]{config['chat_id'] or 'Not set'}[/dim]")
+        console.print()
+
+        options = [
+            ("k", "Set Bot Token"),
+            ("c", "Set Chat ID"),
+            ("q", "Back"),
+        ]
+        choice = select_from_options(options, theme=theme)
+        if choice is None or choice == "q":
+            break
+        elif choice == "k":
+            token = Prompt.ask("Enter Bot Token")
+            if token.strip():
+                config["bot_token"] = token.strip()
+                save_notify_config(config)
+        elif choice == "c":
+            chat_id = Prompt.ask("Enter Chat ID (e.g., @username)")
+            if chat_id.strip():
+                config["chat_id"] = chat_id.strip()
+                save_notify_config(config)
+
+
+def _send_report_tui() -> None:
+    """Open a TUI to select and send a report."""
+    from habitt.core.notify_config import load_notify_config
+    from habitt.core.report import build_and_send_report
+
+    config = load_notify_config()
+    if not config["enabled"]:
+        console.print(
+            "[yellow]Notifications are disabled. Enable them in Settings.[/yellow]"
+        )
+        return
+
+    while True:  # ← حلقهٔ جدید تا کاربر خارج نشود
+        theme = get_active_theme()
+        console.clear()
+        console.rule("Send Report", style=theme["info"])
+        console.print()
+        console.print("Select the type of report to send:", style=theme["dim"])
+        console.print()
+
+        report_options = [
+            ("ALL", "Daily Summary"),
+            ("TICO", "All Tasks"),
+            ("TRACKER", "All Activities"),
+            ("q", "Cancel"),
+        ]
+        choice = select_from_options(report_options, theme=theme)
+        if choice is None or choice == "q":
+            break
+
+        mapping = {
+            "ALL": "summary",
+            "TICO": "tasks",
+            "TRACKER": "activities",
+        }
+        report_type = mapping.get(choice, "summary")
+        date_str = today_shamsi_str()
+
+        success, text = build_and_send_report(report_type, date_str)
+        console.print()
+
+        if success:
+            console.print(
+                f"[{theme['success']}]Report sent successfully![/{theme['success']}]"
+            )
+            print(f"Preview:\n{text}")
+        else:
+            console.print(
+                f"[{theme['error']}]Failed to send report.[/{theme['error']}]"
+            )
+
+        Prompt.ask("\nPress Enter to continue", default="")
+
+
+@main.command()
+def report() -> None:
+    """Open a TUI to send a report to your messenger."""
+    _send_report_tui()
 
 
 if __name__ == "__main__":

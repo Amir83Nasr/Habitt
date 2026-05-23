@@ -1,31 +1,30 @@
-"""Interactive terminal UI for tico using Rich – minimalist redesign."""
+"""Interactive terminal UI for tico using Rich – arrow-navigable redesign."""
 
 from __future__ import annotations
+
+from pathlib import Path
 
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
 
+from habitt.core.jalali_helper import today_shamsi_str
 from habitt.core.menu_utils import select_from_options
 from habitt.core.themes import get_active_theme
-from habitt.tico.models import TodoItem  # فقط یکبار
-from habitt.tico.todo_manager import TodoManager  # TodoItem رو از این نیار
+from habitt.tico.models import TodoItem
+from habitt.tico.todo_manager import TodoManager
 
 console = Console()
 
 
 def _render_checkbox(done: bool, theme: dict[str, str]) -> Text:
-    """Render a [x] or [ ] with theme colours."""
-
     if done:
         return Text("[x]", style=theme["checkbox_done"])
     return Text("[ ]", style=theme["checkbox_open"])
 
 
 def _render_title(item: TodoItem, theme: dict[str, str]) -> Text:
-    """Render task title with strikethrough if done."""
-
     style = theme["dim"] if item.done else "bold"
     text = Text(item.title, style=style)
     if item.done:
@@ -34,21 +33,24 @@ def _render_title(item: TodoItem, theme: dict[str, str]) -> Text:
 
 
 def _tag_str(tag: str | None, theme: dict[str, str]) -> Text:
-    """Render tag with colour."""
-
     if tag:
         return Text(f"#{tag}", style=theme["tag"])
     return Text("")
 
 
-def _build_task_table(manager: TodoManager, tag: str | None = None) -> Table:
-    """Build the Rich table for the current task list."""
-
+def _build_task_table(
+    manager: TodoManager,
+    tag: str | None = None,
+    date: str | None = None,
+) -> Table:
     theme = get_active_theme()
-    items = manager.list_all(tag=tag, include_done=True)
+    items = manager.list_all(tag=tag, include_done=True, date=date)
+    title = f"Tasks for {date}" if date else "All Tasks"
+    if tag:
+        title += f" (tag: {tag})"
 
     table = Table(
-        title="Tasks" if not tag else f"Tasks (tag: {tag})",
+        title=title,
         border_style=theme["panel_border"],
         show_lines=False,
         padding=(0, 1),
@@ -60,7 +62,7 @@ def _build_task_table(manager: TodoManager, tag: str | None = None) -> Table:
     table.add_column("Tag", style=theme["tag"], ratio=1, justify="center")
 
     if not items:
-        table.add_row("", "", "No tasks yet.", "")
+        table.add_row("", "", "No tasks.", "")
         return table
 
     for i, item in enumerate(items, start=1):
@@ -74,8 +76,6 @@ def _build_task_table(manager: TodoManager, tag: str | None = None) -> Table:
 
 
 def _parse_numbers(raw: str, theme: dict[str, str]) -> list[int]:
-    """Convert space-separated numbers to ints, showing error on invalid input."""
-
     try:
         return [int(x) for x in raw.split()]
     except ValueError:
@@ -87,52 +87,76 @@ def _parse_numbers(raw: str, theme: dict[str, str]) -> list[int]:
 
 
 def main_menu() -> None:
-    """Main TUI loop: tasks always on top, single-letter commands."""
     manager = TodoManager()
     current_tag: str | None = None
+    current_date: str | None = today_shamsi_str()  # پیش‌فرض امروز
 
     while True:
         theme = get_active_theme()
         console.clear()
-
-        # ---- Header ----
         console.rule("T I C O", style=theme["info"])
         console.print()
 
-        # ---- Task table ----
-        task_table = _build_task_table(manager, tag=current_tag)
+        task_table = _build_task_table(manager, tag=current_tag, date=current_date)
         console.print(task_table)
         console.print()
 
-        # ---- Command bar ----
+        # منوی arrow شبیه tracker
         options = [
-            ("a", "Add"),
-            ("t", "Toggle"),
+            ("l", "Log (change date)"),
+            ("a", "Add task"),
+            ("t", "Toggle done"),
             ("r", "Remove"),
-            ("f", "Filter"),
-            ("s", "Show all"),
+            ("f", "Filter by tag"),
+            ("s", "Show all (reset filters)"),
+            ("e", "Export"),
             ("q", "Back"),
         ]
-        cmd = select_from_options(options, theme=theme, cancel_key="q")
-        if cmd is None or cmd == "q":
+        choice = select_from_options(options, theme=theme)
+        if choice is None or choice == "q":
             break
 
-        if cmd == "a":
-            # Add task without clearing the screen
+        elif choice == "l":
+            # پرسیدن تاریخ
+            date_input = Prompt.ask(
+                f"Date (YYYY/MM/DD) [default: {today_shamsi_str()}]",
+                default=today_shamsi_str(),
+            )
+            current_date = (
+                date_input.strip() if date_input.strip() else today_shamsi_str()
+            )
+            # نمایش دوبارهٔ صفحه با تاریخ جدید
+            console.clear()
+            console.rule("T I C O", style=theme["info"])
+            console.print()
+            task_table = _build_task_table(manager, tag=current_tag, date=current_date)
+            console.print(task_table)
+            console.print()
+            Prompt.ask("Press Enter to return to today's tasks", default="")
+            current_date = today_shamsi_str()
+
+        elif choice == "a":
             title = Prompt.ask("Title")
             tag: str | None
             tag = Prompt.ask("Tag (optional)", default="")
             tag = tag.strip() if tag.strip() else None
-            manager.add(title, tag)
+            date_input = Prompt.ask(
+                f"Date (YYYY/MM/DD) [default: {today_shamsi_str()}]",
+                default=today_shamsi_str(),
+            )
+            manager.add(title, tag, date=date_input.strip() or today_shamsi_str())
             current_tag = None
+            # بعد از افزودن، بهتره به نمای امروز برگردیم؟ بله، طبق نیاز کاربر
+            current_date = today_shamsi_str()
             console.print(
                 f"[{theme['success']}]Task added: {title}[/{theme['success']}]"
             )
             Prompt.ask("Press Enter", default="")
 
-        elif cmd == "t":
-            # Toggle
-            items = manager.list_all(tag=current_tag, include_done=True)
+        elif choice == "t":
+            items = manager.list_all(
+                tag=current_tag, include_done=True, date=current_date
+            )
             if not items:
                 Prompt.ask("No tasks to toggle. Press Enter", default="")
                 continue
@@ -150,46 +174,66 @@ def main_menu() -> None:
                         f"[{theme['success']}]Toggled {toggled} task(s)."
                         f"[/{theme['success']}]"
                     )
-                else:
-                    console.print(
-                        f"[{theme['error']}]No valid rows selected.[/{theme['error']}]"
-                    )
             Prompt.ask("Press Enter", default="")
 
-        elif cmd == "r":
-            # Remove
-            items = manager.list_all(tag=current_tag, include_done=True)
+        elif choice == "r":
+            items = manager.list_all(
+                tag=current_tag, include_done=True, date=current_date
+            )
             if not items:
                 Prompt.ask("No tasks to remove. Press Enter", default="")
                 continue
             raw = Prompt.ask("Row numbers to remove (space-separated)")
             numbers = _parse_numbers(raw, theme)
             if numbers:
-                ids_to_remove = []
-                for num in numbers:
-                    if 1 <= num <= len(items):
-                        ids_to_remove.append(items[num - 1].id)
-                for task_id in ids_to_remove:
-                    manager.remove(task_id)
+                ids_to_remove = [
+                    items[n - 1].id for n in numbers if 1 <= n <= len(items)
+                ]
+                for tid in ids_to_remove:
+                    manager.remove(tid)
                 console.print(
                     f"[{theme['success']}]Removed {len(ids_to_remove)} task(s)."
                     f"[/{theme['success']}]"
                 )
             Prompt.ask("Press Enter", default="")
 
-        elif cmd == "f":
-            tag_input = Prompt.ask("Tag to filter")
-            current_tag = tag_input.strip() if tag_input.strip() else None
+        elif choice == "f":
+            tag_input = Prompt.ask("Tag to filter").strip()
+            current_tag = tag_input if tag_input else None
 
-        elif cmd == "s":
-            current_tag = None  # reset filter
+        elif choice == "s":
+            current_tag = None
+            current_date = today_shamsi_str()
 
-        elif cmd == "q":
-            break
-
-        else:
-            console.print(
-                f"[{theme['error']}]Unknown command. Use A, T, R, F, S, Q."
-                f"[/{theme['error']}]"
+        elif choice == "e":
+            export_choice = Prompt.ask(
+                "Export: (1) Current view, (2) Specific date",
+                choices=["1", "2"],
+                default="1",
             )
+            fmt = Prompt.ask(
+                "Format (json/csv/txt)",
+                choices=["json", "csv", "txt"],
+                default="txt",
+            )
+            desktop = Path.home() / "Desktop"
+            try:
+                if export_choice == "1":
+                    if current_date:
+                        path = manager.export_date_data(desktop, current_date, fmt)
+                    else:
+                        path = manager.export_data(desktop, fmt)
+                else:
+                    date = Prompt.ask(
+                        f"Date (YYYY/MM/DD) [default: {today_shamsi_str()}]",
+                        default=today_shamsi_str(),
+                    )
+                    path = manager.export_date_data(desktop, date, fmt)
+                console.print(
+                    f"[{theme['success']}]Exported to {path}[/{theme['success']}]"
+                )
+            except Exception as e:
+                console.print(
+                    f"[{theme['error']}]Export failed: {e}[/{theme['error']}]"
+                )
             Prompt.ask("Press Enter", default="")

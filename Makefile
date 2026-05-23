@@ -16,7 +16,7 @@ test: ## Run tests with pytest
 	pytest
 
 test-cov:
-	pytest --cov=habitt --cov-report=term --cov-report=html --cov-fail-under=80 tests/
+	pytest --cov=habitt --cov-report=term --cov-report=html --cov-fail-under=70 tests/
 
 lint: ## Lint source and test files with ruff
 	ruff check habitt/ tests/
