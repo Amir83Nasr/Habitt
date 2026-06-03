@@ -30,7 +30,11 @@ def _load_config() -> dict[str, Any]:
 
 
 def get_data_dir() -> Path:
-    """Return the current data directory (default or custom)."""
+    """Return the current data directory (default or custom).
+
+    Returns:
+        Path: The path to the data directory.
+    """
     config = _load_config()
     custom = config.get("data_dir")
     if custom:
@@ -41,22 +45,38 @@ def get_data_dir() -> Path:
 
 
 def get_tico_file() -> Path:
-    """Return path to the tico JSON file."""
+    """Return path to the tico JSON file.
+
+    Returns:
+        Path: The path to the tico JSON file.
+    """
     return get_data_dir() / "tico.json"
 
 
 def get_tracker_file() -> Path:
-    """Return path to the tracker JSON file."""
+    """Return path to the tracker JSON file.
+
+    Returns:
+        Path: The path to the tracker JSON file.
+    """
     return get_data_dir() / "tracker.json"
 
 
 def get_timer_state_file() -> Path:
-    """Return path to the timer state JSON file."""
+    """Return path to the timer state JSON file.
+
+    Returns:
+        Path: The path to the timer state JSON file.
+    """
     return get_data_dir() / "timer_state.json"
 
 
 def set_data_dir(path_str: str) -> None:
-    """Save a new data directory path to config.json."""
+    """Save a new data directory path to config.json.
+
+    Args:
+        path_str (str): The new path string to save.
+    """
     new_path = Path(path_str).expanduser().resolve()
     new_path.mkdir(parents=True, exist_ok=True)
     config = _load_config()
@@ -66,14 +86,22 @@ def set_data_dir(path_str: str) -> None:
 
 
 def get_plugins_dir() -> Path:
-    """Return the user plugins directory."""
+    """Return the user plugins directory.
+
+    Returns:
+        Path: The path to the user plugins directory.
+    """
     plugins_dir = get_data_dir() / "plugins"
     plugins_dir.mkdir(parents=True, exist_ok=True)
     return plugins_dir
 
 
 def get_builtin_plugins_dir() -> Path:
-    """Return the built-in plugins directory inside the package."""
+    """Return the built-in plugins directory inside the package.
+
+    Returns:
+        Path: The path to the built-in plugins directory.
+    """
     import habitt
 
     return Path(habitt.__file__).parent / "plugins"

@@ -27,71 +27,6 @@ click_completion.init()
 console = Console()
 
 
-def focus_music_menu() -> None:
-    """Sub-menu for Focus music settings."""
-
-    from habitt.core.focus_config import (
-        list_builtin_music,
-        list_user_music,
-        load_focus_config,
-        save_focus_config,
-    )
-
-    config = load_focus_config()
-    while True:
-        theme = get_active_theme()
-        console.clear()
-        console.rule("Focus Music", style=theme["info"])
-        console.print()
-        console.print(
-            "[dim]Place your music files in ~/.habitt/focus_music/ "
-            "or use built-in tracks.[/dim]\n"
-        )
-
-        current = config.get("music_source", "none")
-        if current == "none":
-            status = "No music"
-        elif current.startswith("builtin:"):
-            name = current.split(":", 1)[1]
-            stem = Path(name).stem
-            status = f"[built-in] {stem}"
-        elif current.startswith("custom:"):
-            path = Path(current.split(":", 1)[1])
-            status = f"[custom] {path.stem}"
-        else:
-            status = current
-
-        console.print(f"Current: [bold]{status}[/bold]\n")
-
-        options: list[tuple[str, str]] = []
-
-        # Built-in music
-        for name in list_builtin_music():
-            stem = Path(name).stem
-            label = f"[built-in] {stem}"
-            if current == f"builtin:{name}":
-                label += " (active)"
-            options.append((f"builtin:{name}", label))
-
-        # User music
-        for f in list_user_music():
-            stem = f.stem
-            label = f"[custom] {stem}"
-            if current == f"custom:{f}":
-                label += " (active)"
-            options.append((f"custom:{f}", label))
-
-        options.append(("none", "No music"))
-        options.append(("0", "Back"))
-
-        choice = select_from_options(options, theme=theme, show_key=False)
-        if choice is None or choice == "0":
-            break
-        else:
-            config["music_source"] = choice
-            save_focus_config(config)
-
-
 def _get_current_theme_name() -> str:
     """Return the name of the currently active theme."""
     import json
@@ -215,11 +150,10 @@ def settings_main_menu() -> None:
         console.rule("S E T T I N G S", style=theme["info"])
         options = [
             ("1", "Theme"),
-            ("2", "Focus Music"),
-            ("3", "Notifications"),
-            ("4", "Export All Data"),
-            ("5", "Change Data Directory"),
-            ("6", "Reset All Data"),
+            ("2", "Notifications"),
+            ("3", "Export All Data"),
+            ("4", "Change Data Directory"),
+            ("5", "Reset All Data"),
             ("0", "Back"),
         ]
         choice = select_from_options(options, theme=theme)
@@ -229,14 +163,12 @@ def settings_main_menu() -> None:
         if choice == "1":
             theme_menu()
         elif choice == "2":
-            focus_music_menu()
-        elif choice == "3":
             notify_settings_menu()
-        elif choice == "4":
+        elif choice == "3":
             export_all_data()
-        elif choice == "5":
+        elif choice == "4":
             change_data_dir()
-        elif choice == "6":
+        elif choice == "5":
             reset_all_data()
 
 

@@ -56,7 +56,8 @@ Repository = "https://github.com/Amir83Nasr/habitt"
 Issues = "https://github.com/Amir83Nasr/habitt/issues"
 
 [tool.setuptools.packages.find]
-include = ["habitt", "habitt.*"]
+where = ["src"]
+include = ["habitt*"]
 
 [tool.setuptools.package-data]
 habitt = ["assets/music/*"]
@@ -86,18 +87,28 @@ warn_unused_configs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+pythonpath = ["src"]
 filterwarnings = ["ignore::DeprecationWarning:jdatetime.*"]
 
+[tool.commitizen]
+name = "cz_conventional"
+version = "3.1.0"
+version_files = [
+    "pyproject.toml:version"
+]
+tag_format = "$version"
+update_changelog_on_bump = true
+
 [tool.coverage.run]
-source = ["habitt"]
+source = ["src/habitt"]
 omit = [
-    "habitt/cli.py",
-    "habitt/tico/cli.py",
-    "habitt/tico/tui.py",
-    "habitt/tracker/cli.py",
-    "habitt/tracker/tui.py",
-    "habitt/plugins/*",
-    "habitt/__main__.py",
+    "src/habitt/cli.py",
+    "src/habitt/tico/cli.py",
+    "src/habitt/tico/tui.py",
+    "src/habitt/tracker/cli.py",
+    "src/habitt/tracker/tui.py",
+    "src/habitt/plugins/*",
+    "src/habitt/__main__.py",
 ]
 
 [tool.coverage.report]

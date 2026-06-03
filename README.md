@@ -1,5 +1,7 @@
 # Habitt
 
+![Habitt Logo](assets/Tico.png)
+
 ## Terminal-based habit tracker with todo (tico) and activity logger (tracker)
 
 Manage your daily tasks and activities entirely from the terminal.
@@ -28,7 +30,6 @@ and [jdatetime](https://github.com/slashmili/python-jalali) for Shamsi (Jalali) 
 
 - Log daily activities with start/end times
 - **Live timer** with pause, resume, stop
-- **Deep Focus Mode** with full-screen timer, progress bar, and optional background music
 - Manual time entry with automatic date and time validation
 - Daily and weekly statistics with bar charts
 - Export to JSON, CSV, or beautifully formatted TXT files
@@ -82,8 +83,7 @@ pip install habitt
 ```bash
 git clone https://github.com/yourusername/habitt.git
 cd habitt
-pip install -e ".[dev]"
-pre-commit install
+make install-dev
 ```
 
 Three commands become available globally: `habitt`, `tico`, `tracker`.
@@ -152,45 +152,22 @@ habitt/
 ├── README.md
 ├── LICENSE
 ├── .gitignore
-├── habitt/                       # Main package
-│   ├── __init__.py
-│   ├── __version__.py
-│   ├── cli.py                    # Launcher (habitt command)
-│   ├── __main__.py               # python -m habitt
-│   ├── core/                     # Shared utilities
-│   │   ├── config.py             # Paths and configuration
-│   │   ├── storage.py            # JSON file I/O
-│   │   ├── themes.py             # Color presets + custom themes
-│   │   ├── jalali_helper.py      # Shamsi date/time functions
-│   │   ├── validators.py         # Input validation helpers
-│   │   ├── menu_utils.py         # Arrow-navigable menus
-│   │   ├── plugin_base.py        # Plugin system
-│   │   ├── backup.py             # Automatic backup
-│   │   └── focus_config.py       # Focus mode settings
-│   ├── tico/                     # Todo manager
-│   │   ├── models.py
-│   │   ├── todo_manager.py
-│   │   ├── tui.py
-│   │   └── cli.py
-│   ├── tracker/                  # Activity logger
-│   │   ├── models.py
-│   │   ├── tracker_manager.py
-│   │   ├── tui.py
-│   │   └── cli.py
-│   ├── plugins/                  # Built-in plugins
-│   │   ├── calendar/
-│   │   ├── notes/
-│   │   └── pomodoro/
-│   └── assets/
-│       └── music/                # Built-in focus music
-│           └── lo-fi.mp3
+├── assets/                       # Assets like logos
+│   └── Tico.png
+├── src/                          # Source code
+│   └── habitt/
+│       ├── __init__.py
+│       ├── cli.py                # Launcher (habitt command)
+│       ├── __main__.py           # python -m habitt
+│       ├── core/                 # Shared utilities
+│       ├── tico/                 # Todo manager
+│       ├── tracker/              # Activity logger
+│       ├── plugins/              # Built-in plugins
+│       └── assets/               # Built-in resources
+│           └── music/
 └── tests/                        # Test suite
     ├── conftest.py
-    ├── core/
-    ├── tico/
-    ├── tracker/
-    ├── plugins/
-    └── habitt/
+    └── ...
 ```
 
 ---
@@ -198,7 +175,7 @@ habitt/
 ## Development
 
 ```bash
-make dev-install   # Install with dev dependencies
+make install-dev   # Install with dev dependencies
 make format        # Run black and ruff
 make lint          # Run ruff linter
 make lint-fix      # Auto-fix lint issues

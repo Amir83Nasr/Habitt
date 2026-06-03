@@ -15,7 +15,9 @@ from habitt.core.backup import backup_file
 def save_json(filepath: Path, data: Any) -> None:
     """Save data to a JSON file with indentation.
 
-    Creates parent directories if they don't exist.
+    Args:
+        filepath (Path): The path to the JSON file.
+        data (Any): The data to save.
     """
     backup_file(filepath)
     filepath.parent.mkdir(parents=True, exist_ok=True)
@@ -26,7 +28,11 @@ def save_json(filepath: Path, data: Any) -> None:
 def load_json(filepath: Path) -> Any:
     """Load and return data from a JSON file.
 
-    Returns an empty list if the file does not exist or is corrupt.
+    Args:
+        filepath (Path): The path to the JSON file.
+
+    Returns:
+        Any: The loaded JSON data, or an empty list if loading fails.
     """
     if not filepath.exists():
         return []

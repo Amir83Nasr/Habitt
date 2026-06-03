@@ -128,3 +128,55 @@ def test_export_date_range_invalid_date(temp_data_dir):
     manager = TrackerManager()
     with pytest.raises(ValueError):
         manager.export_date_range(temp_data_dir, "invalid", "1404/08/25", "txt")
+
+
+def test_remove_activity(temp_data_dir):
+    manager = TrackerManager()
+    activity = manager.add_activity("A", "1404/08/25 10:00:00", "1404/08/25 11:00:00")
+
+    # Successful removal
+    assert manager.remove_activity(activity.id) is True
+    assert len(manager.activities) == 0
+
+    # Failed removal
+    assert manager.remove_activity("nonexistent") is False
+
+
+def test_export_data_csv_txt(temp_data_dir):
+    manager = TrackerManager()
+    manager.add_activity("A", "1404/08/25 10:00:00", "1404/08/25 11:00:00")
+
+    # CSV
+    path_csv = manager.export_data(temp_data_dir, "csv")
+    assert path_csv.exists()
+    assert "Date,Title,Start,End,Duration" in path_csv.read_text()
+
+    # TXT
+    path_txt = manager.export_data(temp_data_dir, "txt")
+    assert path_txt.exists()
+    assert "TRACKER - ALL ACTIVITIES" in path_txt.read_text()
+
+
+def test_export_date_data_csv(temp_data_dir):
+    manager = TrackerManager()
+    manager.add_activity("A", "1404/08/25 10:00:00", "1404/08/25 11:00:00")
+    path = manager.export_date_data(temp_data_dir, "1404/08/25", "csv")
+    assert path.exists()
+    assert "Title,Start,End,Duration" in path.read_text()
+
+
+def test_export_date_range_json_csv(temp_data_dir):
+    manager = TrackerManager()
+    manager.add_activity("A", "1404/08/25 10:00:00", "1404/08/25 11:00:00")
+
+    # JSON
+    path_json = manager.export_date_range(
+        temp_data_dir, "1404/08/25", "1404/08/25", "json"
+    )
+    assert path_json.exists()
+
+    # CSV
+    path_csv = manager.export_date_range(
+        temp_data_dir, "1404/08/25", "1404/08/25", "csv"
+    )
+    assert path_csv.exists()
